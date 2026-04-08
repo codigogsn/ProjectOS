@@ -1,0 +1,13 @@
+using ProjectOS.Domain.Entities;
+
+namespace ProjectOS.Application.Interfaces;
+
+public interface IEmailMessageRepository
+{
+    Task<EmailMessage?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<List<EmailMessage>> GetByProjectIdAsync(Guid projectId, CancellationToken ct = default);
+    Task<List<EmailMessage>> GetByOrganizationIdAsync(Guid organizationId, CancellationToken ct = default);
+    Task<bool> ExistsByProviderMessageIdAsync(string providerMessageId, Guid organizationId, CancellationToken ct = default);
+    Task AddAsync(EmailMessage message, CancellationToken ct = default);
+    Task AddRangeAsync(IEnumerable<EmailMessage> messages, CancellationToken ct = default);
+}
