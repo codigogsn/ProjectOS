@@ -97,6 +97,10 @@ public class AppDbContext : DbContext
             e.Property(x => x.ToContactIds).HasMaxLength(4000);
             e.Property(x => x.AssignmentConfidence).HasPrecision(5, 2);
             e.Property(x => x.AssignmentSource).HasMaxLength(50);
+            e.Property(x => x.AiSummary).HasMaxLength(2000);
+            e.Property(x => x.AiSuggestedReply).HasMaxLength(2000);
+            e.Property(x => x.AiCategory).HasMaxLength(50);
+            e.Property(x => x.AiPriority).HasMaxLength(20);
 
             e.HasIndex(x => x.OrganizationId);
             e.HasIndex(x => new { x.OrganizationId, x.ProjectId });

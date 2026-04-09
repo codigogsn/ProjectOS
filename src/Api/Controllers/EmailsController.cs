@@ -83,7 +83,10 @@ public class EmailsController : ControllerBase
             e.SentAtUtc,
             e.CreatedAtUtc,
             projectId = e.ProjectId,
-            assignmentSource = e.AssignmentSource
+            assignmentSource = e.AssignmentSource,
+            aiSummary = e.AiSummary,
+            aiCategory = e.AiCategory,
+            aiPriority = e.AiPriority
         });
 
         return Ok(result);
@@ -114,7 +117,11 @@ public class EmailsController : ControllerBase
             projectId = email.ProjectId,
             fromContactId = email.FromContactId,
             assignmentSource = email.AssignmentSource,
-            assignmentConfidence = email.AssignmentConfidence
+            assignmentConfidence = email.AssignmentConfidence,
+            aiSummary = email.AiSummary,
+            aiSuggestedReply = email.AiSuggestedReply,
+            aiCategory = email.AiCategory,
+            aiPriority = email.AiPriority
         });
     }
 

@@ -206,9 +206,35 @@ try
         }
         else
         {
-            Log.Information("Tables exist — running standard migration...");
-            db.Database.Migrate();
-            Log.Information("Database migration completed successfully");
+            Log.Information("Tables exist — checking for schema updates...");
+
+            // Add missing columns directly (safe for EnsureCreated DBs that can't use Migrate)
+            try
+            {
+                var conn = db.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+
+                var alterStatements = new[]
+                {
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiSummary\" character varying(2000)",
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiSuggestedReply\" character varying(2000)",
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiCategory\" character varying(50)",
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiPriority\" character varying(20)"
+                };
+
+                foreach (var sql in alterStatements)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                Log.Information("Schema update check complete — AI columns ensured");
+            }
+            catch (Exception schemaEx)
+            {
+                Log.Warning(schemaEx, "Schema update failed — new columns may be missing");
+            }
         }
     }
     catch (Exception migrationEx)

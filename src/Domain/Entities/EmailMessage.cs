@@ -24,5 +24,10 @@ public class EmailMessage : BaseEntity
     public decimal? AssignmentConfidence { get; set; }
     public string? AssignmentSource { get; set; }
 
+    public string? AiSummary { get; set; }
+    public string? AiSuggestedReply { get; set; }
+    public string? AiCategory { get; set; }
+    public string? AiPriority { get; set; }
+
     public Guid OrganizationId { get; set; }
 }

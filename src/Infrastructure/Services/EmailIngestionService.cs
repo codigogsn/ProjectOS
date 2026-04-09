@@ -12,6 +12,7 @@ public partial class EmailIngestionService : IEmailIngestionService
     private readonly IGmailService _gmailService;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IContactRepository _contactRepo;
+    private readonly EmailAiService _emailAi;
     private readonly AppDbContext _db;
     private readonly ILogger<EmailIngestionService> _logger;
 
@@ -19,12 +20,14 @@ public partial class EmailIngestionService : IEmailIngestionService
         IGmailService gmailService,
         IEmailMessageRepository emailRepo,
         IContactRepository contactRepo,
+        EmailAiService emailAi,
         AppDbContext db,
         ILogger<EmailIngestionService> logger)
     {
         _gmailService = gmailService;
         _emailRepo = emailRepo;
         _contactRepo = contactRepo;
+        _emailAi = emailAi;
         _db = db;
         _logger = logger;
     }
@@ -109,6 +112,18 @@ public partial class EmailIngestionService : IEmailIngestionService
 
                 await _emailRepo.AddAsync(message, ct);
                 result.Saved++;
+
+                // AI processing — non-blocking, failures logged and skipped
+                try
+                {
+                    await _emailAi.ProcessEmailAsync(message, ct);
+                    await _emailRepo.UpdateAsync(message, ct);
+                    _logger.LogDebug("AI processed email {MessageId}", dto.MessageId);
+                }
+                catch (Exception aiEx)
+                {
+                    _logger.LogWarning(aiEx, "AI processing failed for email {MessageId} — continuing", dto.MessageId);
+                }
 
                 _logger.LogDebug("Saved email {MessageId} — subject: {Subject}", dto.MessageId, subject);
             }

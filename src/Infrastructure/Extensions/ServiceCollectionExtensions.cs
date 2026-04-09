@@ -36,6 +36,11 @@ public static class ServiceCollectionExtensions
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
+        services.AddHttpClient<EmailAiService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
         return services;
     }
 }
