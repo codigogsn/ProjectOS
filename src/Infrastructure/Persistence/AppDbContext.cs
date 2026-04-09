@@ -137,6 +137,7 @@ public class AppDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Title).IsRequired().HasMaxLength(500);
             e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.Status).IsRequired().HasMaxLength(50).HasDefaultValue("Pending");
 
             e.HasIndex(x => x.ProjectId);
 

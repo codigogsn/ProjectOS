@@ -246,8 +246,10 @@ async function loadProjectDetail(projectId) {
             '</div>';
 
         html += '<div id="summaryBlock"></div>';
+        html += '<div id="actionItemsBlock"></div>';
 
         loadSummary(p.id);
+        loadActionItems(p.id);
 
         if (p.emails && p.emails.length > 0) {
             html += '<div class="emails-header">Email Timeline (' + p.emails.length + ')</div>';
@@ -343,6 +345,7 @@ async function generateSummary(projectId) {
     try {
         const summary = await apiCall('/api/projects/' + projectId + '/summary', 'POST');
         renderSummary(summary);
+        loadActionItems(projectId);
         showStatus('Summary generated', 'success');
     } catch (err) {
         block.innerHTML = '<div class="summary-card"><div class="summary-section"><div class="summary-label">Error</div><div class="summary-content">' + escapeHtml(err.message) + '</div></div></div>';
@@ -374,6 +377,72 @@ function renderSummary(s) {
                 '<div class="summary-content summary-action">' + escapeHtml(s.suggestedNextAction) + '</div>' +
             '</div>' +
         '</div>';
+}
+
+// ---- Action Items ----
+
+async function loadActionItems(projectId) {
+    const block = document.getElementById('actionItemsBlock');
+    if (!block) return;
+
+    try {
+        const items = await apiCall('/api/projects/' + projectId + '/actions');
+        renderActionItems(items, projectId);
+    } catch (err) {
+        // No action items yet
+    }
+}
+
+function renderActionItems(items, projectId) {
+    const block = document.getElementById('actionItemsBlock');
+    if (!block) return;
+
+    if (!items || items.length === 0) {
+        block.innerHTML = '';
+        return;
+    }
+
+    var html = '<div class="actions-card">' +
+        '<div class="actions-title">Action Items (' + items.length + ')</div>';
+
+    for (const a of items) {
+        var statusCls = a.status === 'Done' ? 'action-done' : a.status === 'Dismissed' ? 'action-dismissed' : '';
+        html += '<div class="action-item ' + statusCls + '">' +
+            '<div class="action-item-text">' + escapeHtml(a.title) + '</div>' +
+            '<div class="action-item-controls">';
+
+        if (a.status === 'Pending') {
+            html += '<button class="btn-action-done" onclick="markActionDone(\'' + projectId + '\',\'' + a.id + '\')">Done</button>' +
+                '<button class="btn-action-dismiss" onclick="dismissAction(\'' + projectId + '\',\'' + a.id + '\')">Dismiss</button>';
+        } else {
+            html += '<span class="action-status-label">' + escapeHtml(a.status) + '</span>';
+        }
+
+        html += '</div></div>';
+    }
+
+    html += '</div>';
+    block.innerHTML = html;
+}
+
+async function markActionDone(projectId, actionItemId) {
+    try {
+        await apiCall('/api/projects/' + projectId + '/actions/' + actionItemId + '/done', 'POST');
+        loadActionItems(projectId);
+        showStatus('Action item marked done', 'success');
+    } catch (err) {
+        showStatus('Failed: ' + err.message, 'error');
+    }
+}
+
+async function dismissAction(projectId, actionItemId) {
+    try {
+        await apiCall('/api/projects/' + projectId + '/actions/' + actionItemId + '/dismiss', 'POST');
+        loadActionItems(projectId);
+        showStatus('Action item dismissed', 'success');
+    } catch (err) {
+        showStatus('Failed: ' + err.message, 'error');
+    }
 }
 
 function escapeHtml(str) {

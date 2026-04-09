@@ -60,6 +60,10 @@ public class ProjectSummaryService : IProjectSummaryService
         };
 
         _db.ProjectSummaries.Add(summary);
+
+        // Extract and persist action items from PendingItems
+        await ExtractActionItemsAsync(projectId, aiResponse.PendingItems, aiResponse.SuggestedNextAction, ct);
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Summary {SummaryId} generated for project {ProjectId}", summary.Id, projectId);
@@ -72,6 +76,51 @@ public class ProjectSummaryService : IProjectSummaryService
             .Where(s => s.ProjectId == projectId)
             .OrderByDescending(s => s.GeneratedAtUtc)
             .FirstOrDefaultAsync(ct);
+    }
+
+    private async Task ExtractActionItemsAsync(Guid projectId, string pendingItems, string suggestedNextAction, CancellationToken ct)
+    {
+        // Remove previous pending action items for this project
+        var existing = await _db.ActionItems
+            .Where(a => a.ProjectId == projectId && a.Status == "Pending")
+            .ToListAsync(ct);
+        _db.ActionItems.RemoveRange(existing);
+
+        var items = new List<string>();
+
+        // Parse bullet list from PendingItems
+        if (!string.IsNullOrWhiteSpace(pendingItems))
+        {
+            var lines = pendingItems.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var cleaned = line.TrimStart('-', '*', ' ', '\t').Trim();
+                if (!string.IsNullOrWhiteSpace(cleaned))
+                    items.Add(cleaned);
+            }
+        }
+
+        // Add suggested next action as an action item
+        if (!string.IsNullOrWhiteSpace(suggestedNextAction))
+        {
+            var cleaned = suggestedNextAction.Trim();
+            if (!items.Contains(cleaned, StringComparer.OrdinalIgnoreCase))
+                items.Add(cleaned);
+        }
+
+        var priority = 0;
+        foreach (var item in items)
+        {
+            _db.ActionItems.Add(new ActionItem
+            {
+                Title = item.Length > 500 ? item[..500] : item,
+                Status = "Pending",
+                Priority = priority++,
+                ProjectId = projectId
+            });
+        }
+
+        _logger.LogInformation("Extracted {Count} action items for project {ProjectId}", items.Count, projectId);
     }
 
     private static string FormatEmailContext(List<EmailMessage> emails)

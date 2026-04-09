@@ -186,6 +186,58 @@ public class ProjectsController : ControllerBase
         });
     }
 
+    [HttpGet("{projectId:guid}/actions")]
+    public async Task<IActionResult> GetActionItems(Guid projectId, CancellationToken ct)
+    {
+        var project = await _projectRepo.GetByIdAsync(projectId, ct);
+        if (project is null)
+            return NotFound();
+
+        var items = project.ActionItems
+            .OrderBy(a => a.Status == "Pending" ? 0 : a.Status == "Done" ? 1 : 2)
+            .ThenBy(a => a.Priority)
+            .Select(a => new ActionItemDto
+            {
+                Id = a.Id,
+                Title = a.Title,
+                Status = a.Status,
+                Priority = a.Priority,
+                CreatedAtUtc = a.CreatedAtUtc
+            });
+
+        return Ok(items);
+    }
+
+    [HttpPost("{projectId:guid}/actions/{actionItemId:guid}/done")]
+    public async Task<IActionResult> MarkDone(Guid projectId, Guid actionItemId, CancellationToken ct)
+    {
+        var project = await _projectRepo.GetByIdAsync(projectId, ct);
+        var item = project?.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
+        if (item is null)
+            return NotFound();
+
+        item.Status = "Done";
+        await _projectRepo.UpdateAsync(project!, ct);
+
+        _logger.LogInformation("Action item {ActionItemId} marked done", actionItemId);
+        return Ok(new { message = "Marked as done" });
+    }
+
+    [HttpPost("{projectId:guid}/actions/{actionItemId:guid}/dismiss")]
+    public async Task<IActionResult> Dismiss(Guid projectId, Guid actionItemId, CancellationToken ct)
+    {
+        var project = await _projectRepo.GetByIdAsync(projectId, ct);
+        var item = project?.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
+        if (item is null)
+            return NotFound();
+
+        item.Status = "Dismissed";
+        await _projectRepo.UpdateAsync(project!, ct);
+
+        _logger.LogInformation("Action item {ActionItemId} dismissed", actionItemId);
+        return Ok(new { message = "Dismissed" });
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
