@@ -10,6 +10,7 @@ const sidebarProjects = document.getElementById('sidebarProjects');
 let currentProjectId = null;
 let cachedProjects = [];
 let currentView = 'projects';
+let currentEmailId = null;
 const styleView = document.getElementById('styleView');
 
 // ---- View switching ----
@@ -567,6 +568,7 @@ async function loadInbox() {
 }
 
 async function loadEmailDetail(emailId) {
+    currentEmailId = emailId;
     document.querySelectorAll('.inbox-row').forEach(r => r.classList.toggle('active', r.getAttribute('data-id') === emailId));
 
     inboxDetail.innerHTML = '<div class="loading">Loading email...</div>';
@@ -599,7 +601,10 @@ async function loadEmailDetail(emailId) {
         // AI Intelligence card
         html += '<div class="ai-intel-card">' +
             '<div class="ai-intel-header"><span>AI Intelligence</span>' +
-                (hasAi ? '<span class="ai-intel-status ai-ready">Ready</span>' : '<span class="ai-intel-status ai-pending">Pending</span>') +
+                '<span class="ai-intel-header-actions">' +
+                    '<button class="btn-reprocess-single" onclick="reprocessSingleEmail(\'' + e.id + '\')">Reprocess</button>' +
+                    (hasAi ? '<span class="ai-intel-status ai-ready">Ready</span>' : '<span class="ai-intel-status ai-pending">Pending</span>') +
+                '</span>' +
             '</div>';
 
         // Summary
@@ -639,6 +644,46 @@ async function loadEmailDetail(emailId) {
     } catch (err) {
         inboxDetail.innerHTML = '<div class="detail-empty-state"><div class="detail-empty-text">Failed to load email</div></div>';
         showStatus('Error: ' + err.message, 'error');
+    }
+}
+
+// ---- AI Reprocessing ----
+
+async function reprocessAi() {
+    var orgId = getOrgId();
+    if (!orgId) return;
+
+    var btn = document.querySelector('.btn-reprocess');
+    var origText = btn.textContent;
+    btn.textContent = 'Reprocessing...';
+    btn.disabled = true;
+
+    try {
+        var result = await apiCall('/api/emails/backfill-ai?organizationId=' + orgId + '&force=true&limit=50', 'POST');
+        showStatus('AI reprocessed: ' + result.updated + ' updated, ' + result.failed + ' failed', 'success');
+        if (currentView === 'inbox') await loadInbox();
+    } catch (err) {
+        showStatus('Reprocess failed: ' + err.message, 'error');
+    } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+    }
+}
+
+async function reprocessSingleEmail(emailId) {
+    var orgId = getOrgId();
+    if (!orgId) return;
+
+    var btn = document.querySelector('.btn-reprocess-single');
+    if (btn) { btn.textContent = 'Processing...'; btn.disabled = true; }
+
+    try {
+        await apiCall('/api/emails/backfill-ai?organizationId=' + orgId + '&emailId=' + emailId + '&force=true', 'POST');
+        showStatus('Email reprocessed', 'success');
+        await loadEmailDetail(emailId);
+    } catch (err) {
+        showStatus('Reprocess failed: ' + err.message, 'error');
+        if (btn) { btn.textContent = 'Reprocess'; btn.disabled = false; }
     }
 }
 
