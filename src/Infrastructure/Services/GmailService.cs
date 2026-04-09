@@ -173,15 +173,15 @@ public class GmailService : IGmailService, IDisposable
         {
             ClientSecrets = new ClientSecrets
             {
-                ClientId = _options.ClientId,
-                ClientSecret = _options.ClientSecret
+                ClientId = _options.ResolveClientId(),
+                ClientSecret = _options.ResolveClientSecret()
             },
             Scopes = new[] { Google.Apis.Gmail.v1.GmailService.Scope.GmailReadonly }
         });
 
         var credential = new UserCredential(flow, _options.UserEmail, new TokenResponse
         {
-            RefreshToken = _options.RefreshToken
+            RefreshToken = _options.ResolveRefreshToken()
         });
 
         _gmailClient = new Google.Apis.Gmail.v1.GmailService(new BaseClientService.Initializer
