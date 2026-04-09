@@ -18,6 +18,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<GmailOptions>()
             .Bind(configuration.GetSection(GmailOptions.SectionName));
 
+        services.AddOptions<AiOptions>()
+            .Bind(configuration.GetSection(AiOptions.SectionName));
+
         // Repositories
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IContactRepository, ContactRepository>();
@@ -27,6 +30,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGmailService, GmailService>();
         services.AddScoped<IEmailIngestionService, EmailIngestionService>();
         services.AddScoped<IProjectGroupingService, ProjectGroupingService>();
+
+        services.AddHttpClient<IProjectSummaryService, ProjectSummaryService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
 
         return services;
     }

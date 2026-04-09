@@ -284,6 +284,84 @@ body {
     font-weight: 500;
 }
 
+/* Detail actions */
+.detail-actions {
+    margin-top: 12px;
+}
+
+.btn-generate {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-generate:hover {
+    background: var(--accent-hover);
+}
+
+/* Summary card */
+.summary-card {
+    background: var(--surface);
+    border: 1px solid #2a4a6b;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.summary-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.summary-date {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.summary-section {
+    margin-bottom: 12px;
+}
+
+.summary-section:last-child {
+    margin-bottom: 0;
+}
+
+.summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+}
+
+.summary-content {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+}
+
+.summary-action {
+    color: var(--accent);
+    font-weight: 500;
+}
+
 .status-badge.active { background: #064e3b; color: #34d399; }
 .status-badge.draft { background: #1e293b; color: #94a3b8; }
 .status-badge.completed { background: #312e81; color: #a5b4fc; }

@@ -1,13 +1,11 @@
-namespace ProjectOS.Domain.Entities;
+namespace ProjectOS.Application.DTOs;
 
-public class ProjectSummary : BaseEntity
+public class ProjectSummaryDto
 {
+    public Guid Id { get; set; }
     public string SummaryText { get; set; } = string.Empty;
     public string CurrentStatus { get; set; } = string.Empty;
     public string PendingItems { get; set; } = string.Empty;
     public string SuggestedNextAction { get; set; } = string.Empty;
-    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
-
-    public Guid ProjectId { get; set; }
-    public Project Project { get; set; } = null!;
+    public DateTime GeneratedAtUtc { get; set; }
 }

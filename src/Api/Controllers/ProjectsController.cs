@@ -15,17 +15,20 @@ public class ProjectsController : ControllerBase
     private readonly IProjectRepository _projectRepo;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IProjectGroupingService _groupingService;
+    private readonly IProjectSummaryService _summaryService;
     private readonly ILogger<ProjectsController> _logger;
 
     public ProjectsController(
         IProjectRepository projectRepo,
         IEmailMessageRepository emailRepo,
         IProjectGroupingService groupingService,
+        IProjectSummaryService summaryService,
         ILogger<ProjectsController> logger)
     {
         _projectRepo = projectRepo;
         _emailRepo = emailRepo;
         _groupingService = groupingService;
+        _summaryService = summaryService;
         _logger = logger;
     }
 
@@ -144,6 +147,42 @@ public class ProjectsController : ControllerBase
             result.AssignedToExisting,
             result.NewProjectsCreated,
             Message = $"Grouping complete: {result.AssignedToExisting} assigned to existing, {result.NewProjectsCreated} new projects created"
+        });
+    }
+
+    [HttpPost("{projectId:guid}/summary")]
+    public async Task<IActionResult> GenerateSummary(Guid projectId, CancellationToken ct)
+    {
+        _logger.LogInformation("Generating AI summary for project {ProjectId}", projectId);
+
+        var summary = await _summaryService.GenerateSummaryAsync(projectId, ct);
+
+        return Ok(new ProjectSummaryDto
+        {
+            Id = summary.Id,
+            SummaryText = summary.SummaryText,
+            CurrentStatus = summary.CurrentStatus,
+            PendingItems = summary.PendingItems,
+            SuggestedNextAction = summary.SuggestedNextAction,
+            GeneratedAtUtc = summary.GeneratedAtUtc
+        });
+    }
+
+    [HttpGet("{projectId:guid}/summary")]
+    public async Task<IActionResult> GetSummary(Guid projectId, CancellationToken ct)
+    {
+        var summary = await _summaryService.GetLatestSummaryAsync(projectId, ct);
+        if (summary is null)
+            return NotFound(new { message = "No summary generated yet" });
+
+        return Ok(new ProjectSummaryDto
+        {
+            Id = summary.Id,
+            SummaryText = summary.SummaryText,
+            CurrentStatus = summary.CurrentStatus,
+            PendingItems = summary.PendingItems,
+            SuggestedNextAction = summary.SuggestedNextAction,
+            GeneratedAtUtc = summary.GeneratedAtUtc
         });
     }
 

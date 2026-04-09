@@ -139,7 +139,15 @@ async function loadProjectDetail(projectId) {
                 '<span>Last activity: ' + formatRelative(p.lastActivityAtUtc) + '</span>' +
                 '<span>' + p.emailCount + ' emails</span>' +
             '</div>' +
+            '<div class="detail-actions">' +
+                '<button class="btn-generate" onclick="generateSummary(\'' + p.id + '\')">Generate Summary</button>' +
+            '</div>' +
             '</div>';
+
+        html += '<div id="summaryBlock"></div>';
+
+        // Load existing summary in background
+        loadSummary(p.id);
 
         if (p.emails && p.emails.length > 0) {
             html += '<div class="emails-header">Email Timeline (' + p.emails.length + ')</div>';
@@ -212,6 +220,60 @@ async function groupProjects() {
 
 function setButtonsDisabled(disabled) {
     document.querySelectorAll('.topbar-controls button').forEach(b => b.disabled = disabled);
+}
+
+// ---- AI Summary ----
+
+async function loadSummary(projectId) {
+    try {
+        const summary = await apiCall('/api/projects/' + projectId + '/summary');
+        renderSummary(summary);
+    } catch (err) {
+        // No summary yet — that's fine
+    }
+}
+
+async function generateSummary(projectId) {
+    const block = document.getElementById('summaryBlock');
+    if (!block) return;
+
+    block.innerHTML = '<div class="loading">Generating AI summary...</div>';
+    showStatus('Generating summary...', '');
+
+    try {
+        const summary = await apiCall('/api/projects/' + projectId + '/summary', 'POST');
+        renderSummary(summary);
+        showStatus('Summary generated', 'success');
+    } catch (err) {
+        block.innerHTML = '<div class="summary-card"><div class="summary-section"><div class="summary-label">Error</div><div class="summary-content">' + escapeHtml(err.message) + '</div></div></div>';
+        showStatus('Summary failed: ' + err.message, 'error');
+    }
+}
+
+function renderSummary(s) {
+    const block = document.getElementById('summaryBlock');
+    if (!block) return;
+
+    block.innerHTML =
+        '<div class="summary-card">' +
+            '<div class="summary-title">AI Summary <span class="summary-date">' + formatDate(s.generatedAtUtc) + '</span></div>' +
+            '<div class="summary-section">' +
+                '<div class="summary-label">Summary</div>' +
+                '<div class="summary-content">' + escapeHtml(s.summaryText) + '</div>' +
+            '</div>' +
+            '<div class="summary-section">' +
+                '<div class="summary-label">Current Status</div>' +
+                '<div class="summary-content">' + escapeHtml(s.currentStatus) + '</div>' +
+            '</div>' +
+            '<div class="summary-section">' +
+                '<div class="summary-label">Pending Items</div>' +
+                '<div class="summary-content summary-list">' + escapeHtml(s.pendingItems) + '</div>' +
+            '</div>' +
+            '<div class="summary-section">' +
+                '<div class="summary-label">Suggested Next Action</div>' +
+                '<div class="summary-content summary-action">' + escapeHtml(s.suggestedNextAction) + '</div>' +
+            '</div>' +
+        '</div>';
 }
 
 function escapeHtml(str) {

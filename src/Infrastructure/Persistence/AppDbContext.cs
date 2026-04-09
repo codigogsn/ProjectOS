@@ -118,8 +118,12 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ProjectSummary>(e =>
         {
             e.HasKey(x => x.Id);
-            e.Property(x => x.Title).IsRequired().HasMaxLength(500);
-            e.Property(x => x.Content).IsRequired();
+            e.Property(x => x.SummaryText).IsRequired();
+            e.Property(x => x.CurrentStatus).IsRequired().HasMaxLength(500);
+            e.Property(x => x.PendingItems).IsRequired();
+            e.Property(x => x.SuggestedNextAction).IsRequired().HasMaxLength(1000);
+
+            e.HasIndex(x => x.ProjectId);
 
             e.HasOne(x => x.Project)
                 .WithMany(p => p.Summaries)
