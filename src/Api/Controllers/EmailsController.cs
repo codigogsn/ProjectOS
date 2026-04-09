@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using ProjectOS.Application.DTOs;
 using ProjectOS.Application.Interfaces;
 using ProjectOS.Domain.Entities;
 using ProjectOS.Domain.Enums;
+using ProjectOS.Infrastructure.Persistence;
+using ProjectOS.Infrastructure.Services;
 
 namespace ProjectOS.Api.Controllers;
 
@@ -15,6 +18,8 @@ public class EmailsController : ControllerBase
     private readonly IEmailIngestionService _ingestionService;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IProjectRepository _projectRepo;
+    private readonly EmailAiService _emailAi;
+    private readonly AppDbContext _db;
     private readonly IConfiguration _config;
     private readonly ILogger<EmailsController> _logger;
 
@@ -22,12 +27,16 @@ public class EmailsController : ControllerBase
         IEmailIngestionService ingestionService,
         IEmailMessageRepository emailRepo,
         IProjectRepository projectRepo,
+        EmailAiService emailAi,
+        AppDbContext db,
         IConfiguration config,
         ILogger<EmailsController> logger)
     {
         _ingestionService = ingestionService;
         _emailRepo = emailRepo;
         _projectRepo = projectRepo;
+        _emailAi = emailAi;
+        _db = db;
         _config = config;
         _logger = logger;
     }
@@ -237,6 +246,76 @@ public class EmailsController : ControllerBase
         _logger.LogInformation("Created project {ProjectId} from email {EmailId}", project.Id, emailId);
 
         return Ok(new { message = "Project created", projectId = project.Id, projectName = project.Name });
+    }
+
+    [HttpPost("backfill-ai")]
+    public async Task<IActionResult> BackfillAi(
+        [FromQuery] Guid organizationId,
+        [FromQuery] int limit = 50,
+        [FromQuery] bool onlyNull = true,
+        CancellationToken ct = default)
+    {
+        if (organizationId == Guid.Empty)
+            return BadRequest(new { error = "organizationId is required" });
+
+        var guard = ValidateOrg(organizationId);
+        if (guard is not null) return guard;
+
+        if (limit < 1) limit = 1;
+        if (limit > 200) limit = 200;
+
+        _logger.LogInformation("AI backfill started for org {OrgId}, limit={Limit}, onlyNull={OnlyNull}",
+            organizationId, limit, onlyNull);
+
+        var query = _db.EmailMessages
+            .Where(e => e.OrganizationId == organizationId);
+
+        if (onlyNull)
+            query = query.Where(e => e.AiSummary == null || e.AiSummary == "Pending");
+
+        var emails = await query
+            .OrderByDescending(e => e.CreatedAtUtc)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        _logger.LogInformation("Found {Count} emails to backfill", emails.Count);
+
+        var updated = 0;
+        var failed = 0;
+        var failures = new List<object>();
+
+        foreach (var email in emails)
+        {
+            try
+            {
+                _logger.LogDebug("Backfilling AI for email {EmailId}", email.Id);
+
+                await _emailAi.ProcessEmailAsync(email, ct);
+                await _db.SaveChangesAsync(ct);
+
+                updated++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "AI backfill failed for email {EmailId}", email.Id);
+                failed++;
+                failures.Add(new { emailId = email.Id, error = ex.Message });
+
+                // Detach the failed entity to prevent it from blocking subsequent saves
+                _db.Entry(email).State = EntityState.Unchanged;
+            }
+        }
+
+        _logger.LogInformation("AI backfill complete: {Processed} processed, {Updated} updated, {Failed} failed",
+            emails.Count, updated, failed);
+
+        return Ok(new
+        {
+            processed = emails.Count,
+            updated,
+            failed,
+            failures
+        });
     }
 }
 
