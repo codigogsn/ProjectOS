@@ -23,6 +23,10 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // Bind to PORT env var (Render provides this)
+    var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
     // Serilog
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)

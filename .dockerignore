@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.git/
+.vs/
+.idea/
+*.swp
+*.user
+*.suo
+node_modules/
+logs/
+appsettings.Development.json
