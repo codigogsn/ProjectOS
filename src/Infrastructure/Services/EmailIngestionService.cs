@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ProjectOS.Application.Interfaces;
 using ProjectOS.Domain.Entities;
+using ProjectOS.Infrastructure.Persistence;
 
 namespace ProjectOS.Infrastructure.Services;
 
@@ -10,23 +12,29 @@ public partial class EmailIngestionService : IEmailIngestionService
     private readonly IGmailService _gmailService;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IContactRepository _contactRepo;
+    private readonly AppDbContext _db;
     private readonly ILogger<EmailIngestionService> _logger;
 
     public EmailIngestionService(
         IGmailService gmailService,
         IEmailMessageRepository emailRepo,
         IContactRepository contactRepo,
+        AppDbContext db,
         ILogger<EmailIngestionService> logger)
     {
         _gmailService = gmailService;
         _emailRepo = emailRepo;
         _contactRepo = contactRepo;
+        _db = db;
         _logger = logger;
     }
 
     public async Task<EmailIngestionResult> IngestAsync(Guid organizationId, CancellationToken ct = default)
     {
         _logger.LogInformation("Starting Gmail fetch for org {OrgId}...", organizationId);
+
+        // Ensure organization exists before ingesting
+        await EnsureOrganizationExistsAsync(organizationId, ct);
 
         List<GmailMessageDto> emails;
         try
@@ -36,7 +44,7 @@ public partial class EmailIngestionService : IEmailIngestionService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gmail fetch failed — {ExType}: {ExMsg}", ex.GetType().Name, ex.Message);
-            throw; // Let controller handle with stage detection
+            throw;
         }
 
         _logger.LogInformation("Fetched {Count} emails from Gmail for org {OrgId}", emails.Count, organizationId);
@@ -69,18 +77,28 @@ public partial class EmailIngestionService : IEmailIngestionService
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to resolve contact for {Email}", toAddr);
+                        _logger.LogWarning(ex, "Failed to resolve recipient contact for {Email}", toAddr);
                     }
                 }
+
+                // Truncate fields to fit DB constraints
+                var subject = (dto.Subject ?? "(no subject)");
+                if (subject.Length > 500) subject = subject[..500];
+
+                var fromAddr = (dto.From ?? "unknown@unknown.com");
+                if (fromAddr.Length > 256) fromAddr = fromAddr[..256];
+
+                var toAddr2 = string.Join(", ", dto.To);
+                if (toAddr2.Length > 2000) toAddr2 = toAddr2[..2000];
 
                 // Build entity
                 var message = new EmailMessage
                 {
-                    Subject = dto.Subject ?? "(no subject)",
+                    Subject = subject,
                     NormalizedSubject = NormalizeSubject(dto.Subject ?? ""),
                     Body = dto.BodyText ?? "",
-                    FromAddress = dto.From ?? "",
-                    ToAddress = string.Join(", ", dto.To),
+                    FromAddress = fromAddr,
+                    ToAddress = toAddr2,
                     SentAtUtc = dto.SentAtUtc,
                     ProviderMessageId = dto.MessageId,
                     ProviderThreadId = dto.ThreadId,
@@ -92,7 +110,19 @@ public partial class EmailIngestionService : IEmailIngestionService
                 await _emailRepo.AddAsync(message, ct);
                 result.Saved++;
 
-                _logger.LogDebug("Saved email {MessageId} — subject: {Subject}", dto.MessageId, dto.Subject);
+                _logger.LogDebug("Saved email {MessageId} — subject: {Subject}", dto.MessageId, subject);
+            }
+            catch (DbUpdateException ex)
+            {
+                var inner = ex.InnerException?.Message ?? ex.Message;
+                _logger.LogError(ex, "DB save failed for email {MessageId}: {Inner}", dto.MessageId, inner);
+                result.Failed++;
+                result.Failures.Add(new EmailFailure
+                {
+                    MessageId = dto.MessageId,
+                    Stage = "db_save",
+                    Message = $"DbUpdateException: {inner}"
+                });
             }
             catch (Exception ex)
             {
@@ -115,10 +145,30 @@ public partial class EmailIngestionService : IEmailIngestionService
         return result;
     }
 
+    private async Task EnsureOrganizationExistsAsync(Guid organizationId, CancellationToken ct)
+    {
+        var exists = await _db.Organizations.AnyAsync(o => o.Id == organizationId, ct);
+        if (!exists)
+        {
+            _logger.LogInformation("Organization {OrgId} does not exist — creating it", organizationId);
+            _db.Organizations.Add(new Organization
+            {
+                Id = organizationId,
+                Name = "Default Organization",
+                IsActive = true
+            });
+            await _db.SaveChangesAsync(ct);
+            _logger.LogInformation("Organization {OrgId} created", organizationId);
+        }
+    }
+
     private async Task<Contact> ResolveContactAsync(string email, Guid organizationId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(email))
             email = "unknown@unknown.com";
+
+        if (email.Length > 256)
+            email = email[..256];
 
         var contact = await _contactRepo.GetByEmailAsync(email, organizationId, ct);
         if (contact is not null)
@@ -139,12 +189,14 @@ public partial class EmailIngestionService : IEmailIngestionService
     private static string ExtractNameFromEmail(string email)
     {
         var local = email.Split('@')[0];
-        return local.Replace('.', ' ').Replace('_', ' ').Replace('-', ' ');
+        var name = local.Replace('.', ' ').Replace('_', ' ').Replace('-', ' ');
+        return name.Length > 200 ? name[..200] : name;
     }
 
     internal static string NormalizeSubject(string subject)
     {
-        return SubjectPrefixRegex().Replace(subject, "").Trim();
+        var normalized = SubjectPrefixRegex().Replace(subject, "").Trim();
+        return normalized.Length > 500 ? normalized[..500] : normalized;
     }
 
     [GeneratedRegex(@"^(?:(?:re|fwd?|fw)\s*:\s*)+", RegexOptions.IgnoreCase)]
