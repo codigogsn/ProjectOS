@@ -176,14 +176,15 @@ try
 
     app.MapControllers();
 
-    // Auto-migrate on startup (non-production)
-    if (app.Environment.IsDevelopment())
+    // Auto-migrate on startup
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         if (db.Database.IsRelational())
         {
+            Log.Information("Running database migrations...");
             await db.Database.MigrateAsync();
+            Log.Information("Database migrations complete");
         }
     }
 
