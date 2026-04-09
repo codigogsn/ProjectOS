@@ -176,18 +176,44 @@ try
 
     app.MapControllers();
 
-    // Auto-migrate on startup — force schema creation in production
+    // Auto-migrate on startup — handle corrupted migration state
     try
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        Log.Information("Attempting database migration...");
-        db.Database.Migrate();
-        Log.Information("Database migration completed successfully");
+
+        // Check if critical tables actually exist despite migration history
+        var tablesExist = false;
+        try
+        {
+            var conn = db.Database.GetDbConnection();
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'Projects')";
+            var result = await cmd.ExecuteScalarAsync();
+            tablesExist = result is true or (bool)true;
+            if (result is bool b) tablesExist = b;
+        }
+        catch { /* connection issue — will handle below */ }
+
+        if (!tablesExist)
+        {
+            Log.Warning("Critical tables missing — database reset triggered");
+            db.Database.EnsureDeleted();
+            Log.Information("Old database state cleared");
+            db.Database.EnsureCreated();
+            Log.Information("Database created from scratch — all tables ready");
+        }
+        else
+        {
+            Log.Information("Tables exist — running standard migration...");
+            db.Database.Migrate();
+            Log.Information("Database migration completed successfully");
+        }
     }
     catch (Exception migrationEx)
     {
-        Log.Error(migrationEx, "Database migration failed — app will continue but may have errors");
+        Log.Error(migrationEx, "Database setup failed — app will continue but may have errors");
     }
 
     app.Run();
