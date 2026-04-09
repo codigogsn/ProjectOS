@@ -485,21 +485,33 @@ async function loadInbox() {
         skeletonHtml += '<div class="skeleton-row"><div class="skeleton skeleton-line skeleton-line-medium"></div><div class="skeleton skeleton-line skeleton-line-short"></div><div class="skeleton skeleton-line skeleton-line-full"></div></div>';
     }
     inboxList.innerHTML = skeletonHtml;
-    inboxDetail.innerHTML = '<div class="detail-empty">Select an email to view</div>';
+    inboxDetail.innerHTML = '<div class="detail-empty-state"><div class="detail-empty-icon">&#9993;</div><div class="detail-empty-text">Select an email to view intelligence</div></div>';
 
     try {
         var emails = await apiCall('/api/emails?organizationId=' + orgId);
 
-        inboxList.innerHTML = '<div class="inbox-list-header">Inbox (' + emails.length + ')</div>';
+        // Sort: high → medium → low → null
+        var priOrder = { high: 0, medium: 1, low: 2 };
+        emails.sort(function(a, b) {
+            var pa = priOrder[a.aiPriority] !== undefined ? priOrder[a.aiPriority] : 3;
+            var pb = priOrder[b.aiPriority] !== undefined ? priOrder[b.aiPriority] : 3;
+            if (pa !== pb) return pa - pb;
+            return new Date(b.sentAtUtc) - new Date(a.sentAtUtc);
+        });
+
+        var highCount = emails.filter(function(e) { return e.aiPriority === 'high'; }).length;
+        var headerExtra = highCount > 0 ? ' <span class="inbox-header-urgent">' + highCount + ' urgent</span>' : '';
+        inboxList.innerHTML = '<div class="inbox-list-header">Inbox (' + emails.length + ')' + headerExtra + '</div>';
 
         if (emails.length === 0) {
-            inboxList.insertAdjacentHTML('beforeend', '<div class="sidebar-empty">No emails yet. Try syncing first.</div>');
+            inboxList.insertAdjacentHTML('beforeend', '<div class="sidebar-empty">No emails yet. Click <strong>Sync Emails</strong> to load.</div>');
             return;
         }
 
         for (var e of emails) {
+            var pri = (e.aiPriority || '').toLowerCase();
             var row = document.createElement('div');
-            row.className = 'inbox-row';
+            row.className = 'inbox-row' + (pri === 'high' ? ' inbox-row-high' : '') + (pri === 'low' ? ' inbox-row-low' : '');
             row.setAttribute('data-id', e.id);
             row.onclick = (function(emailId) { return function() { loadEmailDetail(emailId); }; })(e.id);
 
@@ -507,8 +519,17 @@ async function loadInbox() {
             if (e.aiCategory && e.aiCategory !== 'unknown') {
                 badges += '<span class="ai-cat-badge cat-' + escapeHtml(e.aiCategory) + '">' + escapeHtml(e.aiCategory) + '</span>';
             }
-            if (e.aiPriority && e.aiPriority !== 'medium') {
-                badges += '<span class="ai-pri-badge pri-' + escapeHtml(e.aiPriority) + '">' + escapeHtml(e.aiPriority) + '</span>';
+            if (pri === 'high') {
+                badges += '<span class="ai-pri-badge pri-high">urgent</span>';
+            }
+
+            var preview = '';
+            if (e.aiSummary && e.aiSummary !== 'Pending' && e.aiSummary !== 'AI unavailable' && e.aiSummary !== 'AI processing failed') {
+                preview = e.aiSummary;
+            } else if (e.bodyPreview) {
+                preview = e.bodyPreview;
+            } else {
+                preview = 'AI analysis pending...';
             }
 
             row.innerHTML =
@@ -520,7 +541,7 @@ async function loadInbox() {
                     '<span class="inbox-row-from">' + escapeHtml(e.fromEmail) + '</span>' +
                     (badges ? '<span class="inbox-row-badges">' + badges + '</span>' : '') +
                 '</div>' +
-                '<div class="inbox-row-preview">' + escapeHtml(e.aiSummary && e.aiSummary !== 'Pending' ? e.aiSummary : e.bodyPreview) + '</div>';
+                '<div class="inbox-row-preview">' + escapeHtml(preview) + '</div>';
             inboxList.appendChild(row);
         }
 
@@ -544,45 +565,62 @@ async function loadEmailDetail(emailId) {
         var priBadge = e.aiPriority
             ? '<span class="ai-pri-badge pri-' + escapeHtml(e.aiPriority) + '">' + escapeHtml(e.aiPriority) + '</span>' : '';
 
-        var hasSummary = e.aiSummary && e.aiSummary !== 'Pending' && e.aiSummary !== 'AI unavailable';
+        var hasSummary = e.aiSummary && e.aiSummary !== 'Pending' && e.aiSummary !== 'AI unavailable' && e.aiSummary !== 'AI processing failed';
         var hasReply = e.aiSuggestedReply && e.aiSuggestedReply.length > 0;
+        var hasAi = hasSummary || hasReply;
 
-        inboxDetail.innerHTML =
-            '<div class="inbox-detail-top">' +
-                '<div class="inbox-detail-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
-                '<div class="inbox-detail-badges">' + catBadge + priBadge + '</div>' +
-            '</div>' +
-            '<div class="inbox-detail-meta">' +
-                '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">From</span><span class="inbox-meta-value">' + escapeHtml(e.fromEmail) + '</span></div>' +
-                '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">To</span><span class="inbox-meta-value">' + escapeHtml(e.toAddress) + '</span></div>' +
-                '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">Date</span><span class="inbox-meta-value">' + formatDate(e.sentAtUtc) + '</span></div>' +
-            '</div>' +
+        var html = '<div class="detail-fadein">';
 
-            // AI Summary
-            '<div class="ai-intel-card">' +
-                '<div class="ai-intel-header">AI Intelligence</div>' +
-                '<div class="ai-intel-row">' +
-                    '<div class="ai-intel-label">Summary</div>' +
-                    '<div class="ai-intel-value">' + (hasSummary ? escapeHtml(e.aiSummary) : '<span class="ai-intel-empty">No AI summary available</span>') + '</div>' +
-                '</div>' +
-                '<div class="ai-intel-row">' +
-                    '<div class="ai-intel-label">Suggested Reply</div>' +
-                    '<div class="ai-intel-value ai-reply-block">' +
-                        (hasReply
-                            ? '<div class="ai-reply-text">' + escapeHtml(e.aiSuggestedReply) + '</div>' +
-                              '<button class="btn-copy-reply" onclick="copyReply(this)">Copy</button>'
-                            : '<span class="ai-intel-empty">No suggested reply</span>') +
-                    '</div>' +
-                '</div>' +
-            '</div>' +
+        // Header
+        html += '<div class="inbox-detail-top">' +
+            '<div class="inbox-detail-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
+            '<div class="inbox-detail-badges">' + catBadge + priBadge + '</div>' +
+        '</div>' +
+        '<div class="inbox-detail-meta">' +
+            '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">From</span><span class="inbox-meta-value">' + escapeHtml(e.fromEmail) + '</span></div>' +
+            '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">To</span><span class="inbox-meta-value">' + escapeHtml(e.toAddress) + '</span></div>' +
+            '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">Date</span><span class="inbox-meta-value">' + formatDate(e.sentAtUtc) + '</span></div>' +
+        '</div>';
 
-            // Email body
-            '<div class="inbox-detail-section">' +
-                '<div class="inbox-detail-section-title">Original Email</div>' +
-                '<div class="inbox-detail-body">' + escapeHtml(e.body) + '</div>' +
+        // AI Intelligence card
+        html += '<div class="ai-intel-card">' +
+            '<div class="ai-intel-header"><span>AI Intelligence</span>' +
+                (hasAi ? '<span class="ai-intel-status ai-ready">Ready</span>' : '<span class="ai-intel-status ai-pending">Pending</span>') +
             '</div>';
+
+        // Summary
+        html += '<div class="ai-intel-row">' +
+            '<div class="ai-intel-label">Summary</div>' +
+            '<div class="ai-intel-value">' +
+                (hasSummary ? escapeHtml(e.aiSummary) : '<span class="ai-intel-empty">AI analysis pending...</span>') +
+            '</div>' +
+        '</div>';
+
+        // Suggested Reply
+        html += '<div class="ai-intel-row">' +
+            '<div class="ai-intel-label">Suggested Reply</div>' +
+            '<div class="ai-intel-value ai-reply-block">';
+
+        if (hasReply) {
+            html += '<div class="ai-reply-text">' + escapeHtml(e.aiSuggestedReply) + '</div>' +
+                '<button class="btn-copy-reply" onclick="copyReply(this)"><span class="copy-icon">&#x2398;</span> Copy reply</button>';
+        } else {
+            html += '<span class="ai-intel-empty">AI analysis pending...</span>';
+        }
+
+        html += '</div></div></div>';
+
+        // Original email
+        html += '<div class="inbox-detail-section">' +
+            '<div class="inbox-detail-section-title">Original Email</div>' +
+            '<div class="inbox-detail-body">' + escapeHtml(e.body) + '</div>' +
+        '</div>';
+
+        html += '</div>';
+
+        inboxDetail.innerHTML = html;
     } catch (err) {
-        inboxDetail.innerHTML = '<div class="detail-empty">Failed to load email</div>';
+        inboxDetail.innerHTML = '<div class="detail-empty-state"><div class="detail-empty-text">Failed to load email</div></div>';
         showStatus('Error: ' + err.message, 'error');
     }
 }
