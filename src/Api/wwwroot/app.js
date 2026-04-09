@@ -502,13 +502,25 @@ async function loadInbox() {
             row.className = 'inbox-row';
             row.setAttribute('data-id', e.id);
             row.onclick = (function(emailId) { return function() { loadEmailDetail(emailId); }; })(e.id);
+
+            var badges = '';
+            if (e.aiCategory && e.aiCategory !== 'unknown') {
+                badges += '<span class="ai-cat-badge cat-' + escapeHtml(e.aiCategory) + '">' + escapeHtml(e.aiCategory) + '</span>';
+            }
+            if (e.aiPriority && e.aiPriority !== 'medium') {
+                badges += '<span class="ai-pri-badge pri-' + escapeHtml(e.aiPriority) + '">' + escapeHtml(e.aiPriority) + '</span>';
+            }
+
             row.innerHTML =
                 '<div class="inbox-row-top">' +
                     '<div class="inbox-row-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
                     '<div class="inbox-row-date">' + formatRelative(e.sentAtUtc) + '</div>' +
                 '</div>' +
-                '<div class="inbox-row-from">' + escapeHtml(e.fromEmail) + '</div>' +
-                '<div class="inbox-row-preview">' + escapeHtml(e.bodyPreview) + '</div>';
+                '<div class="inbox-row-mid">' +
+                    '<span class="inbox-row-from">' + escapeHtml(e.fromEmail) + '</span>' +
+                    (badges ? '<span class="inbox-row-badges">' + badges + '</span>' : '') +
+                '</div>' +
+                '<div class="inbox-row-preview">' + escapeHtml(e.aiSummary && e.aiSummary !== 'Pending' ? e.aiSummary : e.bodyPreview) + '</div>';
             inboxList.appendChild(row);
         }
 
@@ -527,23 +539,61 @@ async function loadEmailDetail(emailId) {
     try {
         var e = await apiCall('/api/emails/' + emailId);
 
+        var catBadge = e.aiCategory && e.aiCategory !== 'unknown'
+            ? '<span class="ai-cat-badge cat-' + escapeHtml(e.aiCategory) + '">' + escapeHtml(e.aiCategory) + '</span>' : '';
+        var priBadge = e.aiPriority
+            ? '<span class="ai-pri-badge pri-' + escapeHtml(e.aiPriority) + '">' + escapeHtml(e.aiPriority) + '</span>' : '';
+
+        var hasSummary = e.aiSummary && e.aiSummary !== 'Pending' && e.aiSummary !== 'AI unavailable';
+        var hasReply = e.aiSuggestedReply && e.aiSuggestedReply.length > 0;
+
         inboxDetail.innerHTML =
-            '<div class="inbox-detail-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
+            '<div class="inbox-detail-top">' +
+                '<div class="inbox-detail-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
+                '<div class="inbox-detail-badges">' + catBadge + priBadge + '</div>' +
+            '</div>' +
             '<div class="inbox-detail-meta">' +
                 '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">From</span><span class="inbox-meta-value">' + escapeHtml(e.fromEmail) + '</span></div>' +
                 '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">To</span><span class="inbox-meta-value">' + escapeHtml(e.toAddress) + '</span></div>' +
                 '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">Date</span><span class="inbox-meta-value">' + formatDate(e.sentAtUtc) + '</span></div>' +
-                (e.gmailMessageId ? '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">ID</span><span class="inbox-meta-value" style="opacity:0.4;font-size:11px">' + escapeHtml(e.gmailMessageId) + '</span></div>' : '') +
             '</div>' +
-            '<div class="inbox-detail-body">' + escapeHtml(e.body) + '</div>' +
+
+            // AI Summary
+            '<div class="ai-intel-card">' +
+                '<div class="ai-intel-header">AI Intelligence</div>' +
+                '<div class="ai-intel-row">' +
+                    '<div class="ai-intel-label">Summary</div>' +
+                    '<div class="ai-intel-value">' + (hasSummary ? escapeHtml(e.aiSummary) : '<span class="ai-intel-empty">No AI summary available</span>') + '</div>' +
+                '</div>' +
+                '<div class="ai-intel-row">' +
+                    '<div class="ai-intel-label">Suggested Reply</div>' +
+                    '<div class="ai-intel-value ai-reply-block">' +
+                        (hasReply
+                            ? '<div class="ai-reply-text">' + escapeHtml(e.aiSuggestedReply) + '</div>' +
+                              '<button class="btn-copy-reply" onclick="copyReply(this)">Copy</button>'
+                            : '<span class="ai-intel-empty">No suggested reply</span>') +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+
+            // Email body
             '<div class="inbox-detail-section">' +
-                '<div class="inbox-detail-section-title">AI Summary</div>' +
-                '<div class="inbox-detail-section-content" style="color:var(--text-dim);font-style:italic">Summary will appear here after project grouping and AI processing</div>' +
+                '<div class="inbox-detail-section-title">Original Email</div>' +
+                '<div class="inbox-detail-body">' + escapeHtml(e.body) + '</div>' +
             '</div>';
     } catch (err) {
         inboxDetail.innerHTML = '<div class="detail-empty">Failed to load email</div>';
         showStatus('Error: ' + err.message, 'error');
     }
+}
+
+function copyReply(btn) {
+    var text = btn.previousElementSibling.textContent;
+    navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
 }
 
 function escapeHtml(str) {
