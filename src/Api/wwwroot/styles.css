@@ -887,6 +887,21 @@ body {
     font-size: 13px;
 }
 
+.ai-no-reply {
+    color: #64748b;
+    font-size: 13px;
+    font-style: italic;
+    padding: 8px 12px;
+    background: #0f172a;
+    border-radius: 4px;
+    border-left: 2px solid #334155;
+    display: block;
+}
+
+.cat-newsletter { background: #1e293b; color: #94a3b8; }
+.cat-promotional { background: #1e293b; color: #94a3b8; }
+.cat-system { background: #1a1a2e; color: #64748b; }
+
 .ai-reply-block {
     display: flex;
     flex-direction: column;

@@ -108,12 +108,27 @@ public class EmailAiService
             var parsed = JsonSerializer.Deserialize<AiEmailResult>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             email.AiSummary = Truncate(parsed?.Summary ?? "No summary", 2000);
-            email.AiSuggestedReply = Truncate(parsed?.Reply ?? "", 2000);
             email.AiCategory = Truncate(parsed?.Category ?? "unknown", 50);
             email.AiPriority = Truncate(parsed?.Priority ?? "medium", 20);
 
-            _logger.LogInformation("AI processed email {EmailId}: cat={Cat}, pri={Pri}, lang={Lang}",
-                email.Id, email.AiCategory, email.AiPriority, detectedLang);
+            // Reply-worthiness: suppress reply for non-actionable emails
+            var noReplyCategories = new[] { "spam", "newsletter", "promotional", "system" };
+            var cat = email.AiCategory.ToLowerInvariant();
+            var needsReply = !noReplyCategories.Contains(cat) && !IsNoReplyEmail(email);
+
+            if (needsReply)
+            {
+                email.AiSuggestedReply = Truncate(parsed?.Reply ?? "", 2000);
+            }
+            else
+            {
+                email.AiSuggestedReply = null;
+                _logger.LogInformation("Reply suppressed for email {EmailId} — category={Cat}, no-reply={IsNoReply}",
+                    email.Id, cat, !needsReply);
+            }
+
+            _logger.LogInformation("AI processed email {EmailId}: cat={Cat}, pri={Pri}, lang={Lang}, replyNeeded={Reply}",
+                email.Id, email.AiCategory, email.AiPriority, detectedLang, needsReply);
         }
         catch (Exception ex)
         {
@@ -123,6 +138,35 @@ public class EmailAiService
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
         }
+    }
+
+    private static bool IsNoReplyEmail(EmailMessage email)
+    {
+        var from = (email.FromAddress ?? "").ToLowerInvariant();
+        var subject = (email.Subject ?? "").ToLowerInvariant();
+        var body = (email.Body ?? "").ToLowerInvariant();
+
+        // No-reply sender addresses
+        if (from.Contains("noreply") || from.Contains("no-reply") || from.Contains("donotreply") ||
+            from.Contains("mailer-daemon") || from.Contains("postmaster@") || from.Contains("notifications@"))
+            return true;
+
+        // Newsletter/promotional signals in body
+        var promoSignals = new[] { "unsubscribe", "click here to unsubscribe", "manage your preferences",
+            "view in browser", "email preferences", "opt out", "you are receiving this" };
+        var promoCount = 0;
+        foreach (var s in promoSignals)
+            if (body.Contains(s)) promoCount++;
+        if (promoCount >= 2) return true;
+
+        // Automated system emails
+        var systemSubjects = new[] { "password reset", "verify your email", "login alert",
+            "security alert", "order confirmation", "shipping notification", "delivery update",
+            "payment receipt", "invoice #", "subscription", "your receipt" };
+        foreach (var s in systemSubjects)
+            if (subject.Contains(s)) return true;
+
+        return false;
     }
 
     private async Task<UserToneProfile> LoadToneProfileAsync(Guid organizationId, CancellationToken ct)
@@ -189,7 +233,7 @@ public class EmailAiService
     {
         return "You are an email assistant for business operations.\n\n" +
             "Respond with ONLY valid JSON (no code fences, no markdown):\n" +
-            "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply\", \"category\": \"sales|support|spam|internal|billing|scheduling\", \"priority\": \"high|medium|low\"}\n\n" +
+            "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply OR empty string if no reply needed\", \"category\": \"sales|support|spam|internal|billing|scheduling|newsletter|promotional|system\", \"priority\": \"high|medium|low\"}\n\n" +
             "═══ CRITICAL LANGUAGE RULE ═══\n" +
             $"The reply MUST be written in {language}.\n" +
             $"Do NOT use any language other than {language} for the reply field.\n" +

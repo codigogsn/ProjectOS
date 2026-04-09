@@ -618,6 +618,9 @@ async function loadEmailDetail(emailId) {
         if (hasReply) {
             html += '<div class="ai-reply-text">' + escapeHtml(e.aiSuggestedReply) + '</div>' +
                 '<button class="btn-copy-reply" onclick="copyReply(this)"><span class="copy-icon">&#x2398;</span> Copy reply</button>';
+        } else if (hasSummary) {
+            // AI ran but intentionally suppressed the reply
+            html += '<span class="ai-no-reply">No reply suggested for this email</span>';
         } else {
             html += '<span class="ai-intel-empty">AI analysis pending...</span>';
         }
