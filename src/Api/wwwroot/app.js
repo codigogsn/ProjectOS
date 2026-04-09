@@ -2,9 +2,37 @@ const statusBar = document.getElementById('statusBar');
 const projectList = document.getElementById('projectList');
 const unassignedList = document.getElementById('unassignedList');
 const projectDetail = document.getElementById('projectDetail');
+const inboxView = document.getElementById('inboxView');
+const inboxList = document.getElementById('inboxList');
+const inboxDetail = document.getElementById('inboxDetail');
+const sidebarProjects = document.getElementById('sidebarProjects');
 
 let currentProjectId = null;
 let cachedProjects = [];
+let currentView = 'projects';
+
+// ---- View switching ----
+
+function switchView(view) {
+    currentView = view;
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+
+    if (view === 'projects') {
+        sidebarProjects.style.display = '';
+        projectDetail.style.display = '';
+        inboxView.style.display = 'none';
+    } else {
+        sidebarProjects.style.display = 'none';
+        projectDetail.style.display = 'none';
+        inboxView.style.display = '';
+        loadInbox();
+    }
+}
+
+function loadCurrentView() {
+    if (currentView === 'inbox') loadInbox();
+    else loadProjects();
+}
 
 function getOrgId() {
     const val = document.getElementById('orgId').value.trim();
@@ -442,6 +470,79 @@ async function dismissAction(projectId, actionItemId) {
         showStatus('Action item dismissed', 'success');
     } catch (err) {
         showStatus('Failed: ' + err.message, 'error');
+    }
+}
+
+// ---- Inbox ----
+
+async function loadInbox() {
+    const orgId = getOrgId();
+    if (!orgId) return;
+
+    // Show skeleton loading
+    var skeletonHtml = '<div class="inbox-list-header">Inbox</div>';
+    for (var i = 0; i < 8; i++) {
+        skeletonHtml += '<div class="skeleton-row"><div class="skeleton skeleton-line skeleton-line-medium"></div><div class="skeleton skeleton-line skeleton-line-short"></div><div class="skeleton skeleton-line skeleton-line-full"></div></div>';
+    }
+    inboxList.innerHTML = skeletonHtml;
+    inboxDetail.innerHTML = '<div class="detail-empty">Select an email to view</div>';
+
+    try {
+        var emails = await apiCall('/api/emails?organizationId=' + orgId);
+
+        inboxList.innerHTML = '<div class="inbox-list-header">Inbox (' + emails.length + ')</div>';
+
+        if (emails.length === 0) {
+            inboxList.insertAdjacentHTML('beforeend', '<div class="sidebar-empty">No emails yet. Try syncing first.</div>');
+            return;
+        }
+
+        for (var e of emails) {
+            var row = document.createElement('div');
+            row.className = 'inbox-row';
+            row.setAttribute('data-id', e.id);
+            row.onclick = (function(emailId) { return function() { loadEmailDetail(emailId); }; })(e.id);
+            row.innerHTML =
+                '<div class="inbox-row-top">' +
+                    '<div class="inbox-row-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
+                    '<div class="inbox-row-date">' + formatRelative(e.sentAtUtc) + '</div>' +
+                '</div>' +
+                '<div class="inbox-row-from">' + escapeHtml(e.fromEmail) + '</div>' +
+                '<div class="inbox-row-preview">' + escapeHtml(e.bodyPreview) + '</div>';
+            inboxList.appendChild(row);
+        }
+
+        showStatus('Loaded ' + emails.length + ' emails', 'success');
+    } catch (err) {
+        inboxList.innerHTML = '<div class="inbox-list-header">Inbox</div><div class="sidebar-empty">Failed to load emails</div>';
+        showStatus('Error: ' + err.message, 'error');
+    }
+}
+
+async function loadEmailDetail(emailId) {
+    document.querySelectorAll('.inbox-row').forEach(r => r.classList.toggle('active', r.getAttribute('data-id') === emailId));
+
+    inboxDetail.innerHTML = '<div class="loading">Loading email...</div>';
+
+    try {
+        var e = await apiCall('/api/emails/' + emailId);
+
+        inboxDetail.innerHTML =
+            '<div class="inbox-detail-subject">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
+            '<div class="inbox-detail-meta">' +
+                '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">From</span><span class="inbox-meta-value">' + escapeHtml(e.fromEmail) + '</span></div>' +
+                '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">To</span><span class="inbox-meta-value">' + escapeHtml(e.toAddress) + '</span></div>' +
+                '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">Date</span><span class="inbox-meta-value">' + formatDate(e.sentAtUtc) + '</span></div>' +
+                (e.gmailMessageId ? '<div class="inbox-detail-meta-row"><span class="inbox-meta-label">ID</span><span class="inbox-meta-value" style="opacity:0.4;font-size:11px">' + escapeHtml(e.gmailMessageId) + '</span></div>' : '') +
+            '</div>' +
+            '<div class="inbox-detail-body">' + escapeHtml(e.body) + '</div>' +
+            '<div class="inbox-detail-section">' +
+                '<div class="inbox-detail-section-title">AI Summary</div>' +
+                '<div class="inbox-detail-section-content" style="color:var(--text-dim);font-style:italic">Summary will appear here after project grouping and AI processing</div>' +
+            '</div>';
+    } catch (err) {
+        inboxDetail.innerHTML = '<div class="detail-empty">Failed to load email</div>';
+        showStatus('Error: ' + err.message, 'error');
     }
 }
 

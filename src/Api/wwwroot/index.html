@@ -10,18 +10,23 @@
     <header class="topbar">
         <div class="topbar-left">
             <h1>ProjectOS</h1>
+            <nav class="topbar-nav">
+                <button class="nav-tab active" data-view="projects" onclick="switchView('projects')">Projects</button>
+                <button class="nav-tab" data-view="inbox" onclick="switchView('inbox')">Inbox</button>
+            </nav>
         </div>
         <div class="topbar-controls">
             <input type="text" id="orgId" placeholder="Organization ID" />
             <button onclick="syncEmails()">Sync Emails</button>
             <button onclick="groupProjects()">Group Projects</button>
-            <button onclick="loadProjects()">Refresh</button>
+            <button onclick="loadCurrentView()">Refresh</button>
         </div>
         <div class="topbar-status" id="statusBar"></div>
     </header>
 
     <main class="container">
-        <aside class="sidebar">
+        <!-- Projects view -->
+        <aside class="sidebar" id="sidebarProjects">
             <div id="projectList">
                 <div class="sidebar-header">Projects</div>
                 <div class="sidebar-empty">Enter an Organization ID and click Refresh</div>
@@ -30,10 +35,20 @@
                 <div class="sidebar-header unassigned-header">Unassigned Inbox</div>
             </div>
         </aside>
-
         <section class="detail" id="projectDetail">
             <div class="detail-empty">Select a project to view details</div>
         </section>
+
+        <!-- Inbox view (hidden by default) -->
+        <div class="inbox-view" id="inboxView" style="display:none">
+            <div class="inbox-list" id="inboxList">
+                <div class="inbox-list-header">Inbox</div>
+                <div class="sidebar-empty">Click Refresh to load emails</div>
+            </div>
+            <div class="inbox-detail" id="inboxDetail">
+                <div class="detail-empty">Select an email to view</div>
+            </div>
+        </div>
     </main>
 
     <script src="app.js"></script>
