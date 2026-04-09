@@ -326,8 +326,15 @@ async function syncEmails() {
     setButtonsDisabled(true);
 
     try {
-        const result = await apiCall('/api/emails/sync?organizationId=' + orgId, 'POST');
-        showStatus('Sync: ' + result.saved + ' new, ' + result.duplicates + ' duplicates', 'success');
+        const result = await apiCall('/api/gmail/sync?organizationId=' + orgId);
+        showStatus('Sync: ' + (result.saved || 0) + ' new, ' + (result.duplicates || 0) + ' duplicates', 'success');
+
+        // Force refresh whichever view is active
+        if (currentView === 'inbox') {
+            await loadInbox();
+        } else {
+            await loadProjects();
+        }
     } catch (err) {
         showStatus('Sync failed: ' + err.message, 'error');
     } finally {
