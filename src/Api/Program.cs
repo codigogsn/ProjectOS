@@ -35,6 +35,10 @@ try
     var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL")
         ?? builder.Configuration.GetConnectionString("DefaultConnection");
 
+    // Fail-fast: require database in non-Development environments
+    if (string.IsNullOrEmpty(connectionString) && !builder.Environment.IsDevelopment())
+        throw new InvalidOperationException("DATABASE_URL or ConnectionStrings:DefaultConnection must be configured for production");
+
     if (!string.IsNullOrEmpty(connectionString))
     {
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -97,13 +101,26 @@ try
     builder.Services.AddEndpointsApiExplorer();
 
     // CORS
+    var allowedOrigin = builder.Configuration["AllowedOrigin"]
+        ?? Environment.GetEnvironmentVariable("ALLOWED_ORIGIN");
+
     builder.Services.AddCors(options =>
     {
         options.AddDefaultPolicy(policy =>
         {
-            policy.AllowAnyOrigin()
-                .AllowAnyMethod()
-                .AllowAnyHeader();
+            if (!string.IsNullOrEmpty(allowedOrigin))
+            {
+                policy.WithOrigins(allowedOrigin.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+            }
+            else
+            {
+                // Development fallback only
+                policy.WithOrigins("http://localhost:5000", "http://localhost:5001", "https://localhost:5001")
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+            }
         });
     });
 

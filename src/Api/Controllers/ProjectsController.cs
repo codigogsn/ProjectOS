@@ -9,13 +9,14 @@ namespace ProjectOS.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[AllowAnonymous] // MVP: no login UI yet — will add [Authorize] when auth is implemented
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectRepository _projectRepo;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IProjectGroupingService _groupingService;
     private readonly IProjectSummaryService _summaryService;
+    private readonly IConfiguration _config;
     private readonly ILogger<ProjectsController> _logger;
 
     public ProjectsController(
@@ -23,18 +24,31 @@ public class ProjectsController : ControllerBase
         IEmailMessageRepository emailRepo,
         IProjectGroupingService groupingService,
         IProjectSummaryService summaryService,
+        IConfiguration config,
         ILogger<ProjectsController> logger)
     {
         _projectRepo = projectRepo;
         _emailRepo = emailRepo;
         _groupingService = groupingService;
         _summaryService = summaryService;
+        _config = config;
         _logger = logger;
+    }
+
+    private IActionResult? ValidateOrg(Guid organizationId)
+    {
+        var allowed = _config["DefaultOrganizationId"];
+        if (!string.IsNullOrEmpty(allowed) && !organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
+            return Forbid();
+        return null;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] Guid organizationId, CancellationToken ct)
     {
+        var guard = ValidateOrg(organizationId);
+        if (guard is not null) return guard;
+
         var projects = await _projectRepo.GetByOrganizationIdAsync(organizationId, ct);
 
         _logger.LogInformation("Returning {Count} projects for org {OrgId}", projects.Count, organizationId);
@@ -95,6 +109,9 @@ public class ProjectsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, CancellationToken ct)
     {
+        var guard = ValidateOrg(request.OrganizationId);
+        if (guard is not null) return guard;
+
         var project = new Project
         {
             Name = request.Name,
@@ -137,6 +154,9 @@ public class ProjectsController : ControllerBase
     [HttpPost("group")]
     public async Task<IActionResult> Group([FromQuery] Guid organizationId, CancellationToken ct)
     {
+        var guard = ValidateOrg(organizationId);
+        if (guard is not null) return guard;
+
         _logger.LogInformation("Project grouping triggered for organization {OrgId}", organizationId);
 
         var result = await _groupingService.GroupEmailsAsync(organizationId, ct);
@@ -212,12 +232,15 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> MarkDone(Guid projectId, Guid actionItemId, CancellationToken ct)
     {
         var project = await _projectRepo.GetByIdAsync(projectId, ct);
-        var item = project?.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
+        if (project is null)
+            return NotFound();
+
+        var item = project.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
         if (item is null)
             return NotFound();
 
         item.Status = "Done";
-        await _projectRepo.UpdateAsync(project!, ct);
+        await _projectRepo.UpdateAsync(project, ct);
 
         _logger.LogInformation("Action item {ActionItemId} marked done", actionItemId);
         return Ok(new { message = "Marked as done" });
@@ -227,12 +250,15 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> Dismiss(Guid projectId, Guid actionItemId, CancellationToken ct)
     {
         var project = await _projectRepo.GetByIdAsync(projectId, ct);
-        var item = project?.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
+        if (project is null)
+            return NotFound();
+
+        var item = project.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
         if (item is null)
             return NotFound();
 
         item.Status = "Dismissed";
-        await _projectRepo.UpdateAsync(project!, ct);
+        await _projectRepo.UpdateAsync(project, ct);
 
         _logger.LogInformation("Action item {ActionItemId} dismissed", actionItemId);
         return Ok(new { message = "Dismissed" });

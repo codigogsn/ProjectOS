@@ -9,29 +9,43 @@ namespace ProjectOS.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[AllowAnonymous] // MVP: no login UI yet — will add [Authorize] when auth is implemented
 public class EmailsController : ControllerBase
 {
     private readonly IEmailIngestionService _ingestionService;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IProjectRepository _projectRepo;
+    private readonly IConfiguration _config;
     private readonly ILogger<EmailsController> _logger;
 
     public EmailsController(
         IEmailIngestionService ingestionService,
         IEmailMessageRepository emailRepo,
         IProjectRepository projectRepo,
+        IConfiguration config,
         ILogger<EmailsController> logger)
     {
         _ingestionService = ingestionService;
         _emailRepo = emailRepo;
         _projectRepo = projectRepo;
+        _config = config;
         _logger = logger;
+    }
+
+    private IActionResult? ValidateOrg(Guid organizationId)
+    {
+        var allowed = _config["DefaultOrganizationId"];
+        if (!string.IsNullOrEmpty(allowed) && !organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
+            return Forbid();
+        return null;
     }
 
     [HttpPost("sync")]
     public async Task<IActionResult> Sync([FromQuery] Guid organizationId, CancellationToken ct)
     {
+        var guard = ValidateOrg(organizationId);
+        if (guard is not null) return guard;
+
         _logger.LogInformation("Email sync triggered for organization {OrgId}", organizationId);
 
         var result = await _ingestionService.IngestAsync(organizationId, ct);
@@ -48,6 +62,9 @@ public class EmailsController : ControllerBase
     [HttpGet("unassigned")]
     public async Task<IActionResult> GetUnassigned([FromQuery] Guid organizationId, CancellationToken ct)
     {
+        var guard = ValidateOrg(organizationId);
+        if (guard is not null) return guard;
+
         var emails = await _emailRepo.GetUnassignedWithContactAsync(organizationId, 100, ct);
 
         _logger.LogInformation("Returning {Count} unassigned emails for org {OrgId}", emails.Count, organizationId);
@@ -77,12 +94,29 @@ public class EmailsController : ControllerBase
         if (project is null)
             return NotFound(new { message = "Project not found" });
 
+        // Decrement old project's count if reassigning
+        if (email.ProjectId.HasValue && email.ProjectId.Value != request.ProjectId)
+        {
+            var oldProject = await _projectRepo.GetByIdAsync(email.ProjectId.Value, ct);
+            if (oldProject is not null && oldProject.EmailCount > 0)
+            {
+                oldProject.EmailCount--;
+                await _projectRepo.UpdateAsync(oldProject, ct);
+            }
+        }
+
+        var wasUnassigned = !email.ProjectId.HasValue;
+
         email.ProjectId = request.ProjectId;
         email.AssignmentSource = "manual";
         email.AssignmentConfidence = 1.0m;
         await _emailRepo.UpdateAsync(email, ct);
 
-        project.EmailCount++;
+        // Only increment if this is a new assignment or reassignment to a different project
+        if (wasUnassigned || email.ProjectId != request.ProjectId)
+        {
+            project.EmailCount++;
+        }
         if (email.SentAtUtc > (project.LastActivityAtUtc ?? DateTime.MinValue))
             project.LastActivityAtUtc = email.SentAtUtc;
         await _projectRepo.UpdateAsync(project, ct);
@@ -98,6 +132,17 @@ public class EmailsController : ControllerBase
         var email = await _emailRepo.GetByIdAsync(emailId, ct);
         if (email is null)
             return NotFound(new { message = "Email not found" });
+
+        // Decrement old project's count if email was previously assigned
+        if (email.ProjectId.HasValue)
+        {
+            var oldProject = await _projectRepo.GetByIdAsync(email.ProjectId.Value, ct);
+            if (oldProject is not null && oldProject.EmailCount > 0)
+            {
+                oldProject.EmailCount--;
+                await _projectRepo.UpdateAsync(oldProject, ct);
+            }
+        }
 
         var projectName = !string.IsNullOrWhiteSpace(email.NormalizedSubject)
             ? email.NormalizedSubject
