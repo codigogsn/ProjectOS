@@ -23,7 +23,7 @@ public class ProjectRepository : IProjectRepository
     {
         return await _db.Projects
             .Where(p => p.OrganizationId == organizationId)
-            .OrderByDescending(p => p.CreatedAtUtc)
+            .OrderByDescending(p => p.LastActivityAtUtc ?? p.CreatedAtUtc)
             .ToListAsync(ct);
     }
 

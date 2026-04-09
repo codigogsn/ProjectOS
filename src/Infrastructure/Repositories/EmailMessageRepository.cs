@@ -24,6 +24,16 @@ public class EmailMessageRepository : IEmailMessageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<EmailMessage>> GetRecentByProjectIdAsync(Guid projectId, int limit = 50, CancellationToken ct = default)
+    {
+        return await _db.EmailMessages
+            .Include(m => m.FromContact)
+            .Where(m => m.ProjectId == projectId)
+            .OrderByDescending(m => m.SentAtUtc)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<EmailMessage>> GetByOrganizationIdAsync(Guid organizationId, CancellationToken ct = default)
     {
         return await _db.EmailMessages

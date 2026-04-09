@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ProjectOS.Application.DTOs;
 using ProjectOS.Application.Interfaces;
 using ProjectOS.Domain.Entities;
 using ProjectOS.Domain.Enums;
@@ -12,15 +13,18 @@ namespace ProjectOS.Api.Controllers;
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectRepository _projectRepo;
+    private readonly IEmailMessageRepository _emailRepo;
     private readonly IProjectGroupingService _groupingService;
     private readonly ILogger<ProjectsController> _logger;
 
     public ProjectsController(
         IProjectRepository projectRepo,
+        IEmailMessageRepository emailRepo,
         IProjectGroupingService groupingService,
         ILogger<ProjectsController> logger)
     {
         _projectRepo = projectRepo;
+        _emailRepo = emailRepo;
         _groupingService = groupingService;
         _logger = logger;
     }
@@ -29,18 +33,20 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] Guid organizationId, CancellationToken ct)
     {
         var projects = await _projectRepo.GetByOrganizationIdAsync(organizationId, ct);
-        return Ok(projects.Select(p => new
+
+        _logger.LogInformation("Returning {Count} projects for org {OrgId}", projects.Count, organizationId);
+
+        var result = projects.Select(p => new ProjectListItemDto
         {
-            p.Id,
-            p.Name,
-            p.Description,
+            Id = p.Id,
+            Name = p.Name,
             Status = p.Status.ToString(),
-            p.StartDate,
-            p.DueDate,
-            p.EmailCount,
-            p.LastActivityAtUtc,
-            p.CreatedAtUtc
-        }));
+            EmailCount = p.EmailCount,
+            LastActivityAtUtc = p.LastActivityAtUtc,
+            CreatedAtUtc = p.CreatedAtUtc
+        });
+
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
@@ -50,32 +56,37 @@ public class ProjectsController : ControllerBase
         if (project is null)
             return NotFound();
 
-        return Ok(new
+        var emails = await _emailRepo.GetRecentByProjectIdAsync(id, 50, ct);
+
+        _logger.LogInformation("Returning project {ProjectId} with {EmailCount} emails", id, emails.Count);
+
+        var dto = new ProjectDetailDto
         {
-            project.Id,
-            project.Name,
-            project.Description,
+            Id = project.Id,
+            Name = project.Name,
+            Description = project.Description,
             Status = project.Status.ToString(),
-            project.StartDate,
-            project.DueDate,
-            project.CompletedAtUtc,
-            project.CreatedAtUtc,
-            project.UpdatedAtUtc,
-            ActionItems = project.ActionItems.Select(a => new
+            EmailCount = project.EmailCount,
+            StartDate = project.StartDate,
+            DueDate = project.DueDate,
+            LastActivityAtUtc = project.LastActivityAtUtc,
+            CompletedAtUtc = project.CompletedAtUtc,
+            CreatedAtUtc = project.CreatedAtUtc,
+            Emails = emails.Select(e => new EmailDto
             {
-                a.Id,
-                a.Title,
-                a.IsCompleted,
-                a.Priority,
-                a.DueDate
-            }),
-            Summaries = project.Summaries.Select(s => new
-            {
-                s.Id,
-                s.Title,
-                s.GeneratedAtUtc
-            })
-        });
+                Id = e.Id,
+                Subject = e.Subject,
+                BodyPreview = TrimBody(e.Body, 500),
+                FromName = e.FromContact?.FullName ?? "",
+                FromEmail = e.FromAddress,
+                ToAddress = e.ToAddress,
+                SentAtUtc = e.SentAtUtc,
+                AssignmentConfidence = e.AssignmentConfidence,
+                AssignmentSource = e.AssignmentSource
+            }).ToList()
+        };
+
+        return Ok(dto);
     }
 
     [HttpPost]
@@ -141,6 +152,13 @@ public class ProjectsController : ControllerBase
     {
         await _projectRepo.DeleteAsync(id, ct);
         return NoContent();
+    }
+
+    private static string TrimBody(string body, int maxLength)
+    {
+        if (string.IsNullOrEmpty(body) || body.Length <= maxLength)
+            return body;
+        return body[..maxLength] + "...";
     }
 }
 
