@@ -1,8 +1,10 @@
 const statusBar = document.getElementById('statusBar');
 const projectList = document.getElementById('projectList');
+const unassignedList = document.getElementById('unassignedList');
 const projectDetail = document.getElementById('projectDetail');
 
 let currentProjectId = null;
+let cachedProjects = [];
 
 function getOrgId() {
     const val = document.getElementById('orgId').value.trim();
@@ -63,52 +65,156 @@ async function apiCall(url, method) {
     return res.json();
 }
 
+async function apiCallJson(url, method, body) {
+    const res = await fetch(url, {
+        method: method || 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || res.statusText);
+    }
+    return res.json();
+}
+
 // ---- Projects list ----
 
 async function loadProjects() {
     const orgId = getOrgId();
     if (!orgId) return;
 
-    const header = projectList.querySelector('.sidebar-header');
-    projectList.innerHTML = '';
-    projectList.appendChild(header);
-    projectList.insertAdjacentHTML('beforeend', '<div class="loading">Loading projects...</div>');
+    projectList.innerHTML = '<div class="sidebar-header">Projects</div><div class="loading">Loading...</div>';
 
     try {
         const projects = await apiCall('/api/projects?organizationId=' + orgId);
+        cachedProjects = projects;
 
-        projectList.innerHTML = '';
-        projectList.appendChild(header);
+        projectList.innerHTML = '<div class="sidebar-header">Projects (' + projects.length + ')</div>';
 
         if (projects.length === 0) {
             projectList.insertAdjacentHTML('beforeend',
                 '<div class="sidebar-empty">No projects found. Try syncing emails and grouping.</div>');
-            return;
-        }
-
-        header.textContent = 'Projects (' + projects.length + ')';
-
-        for (const p of projects) {
-            const div = document.createElement('div');
-            div.className = 'project-item' + (p.id === currentProjectId ? ' active' : '');
-            div.onclick = () => loadProjectDetail(p.id);
-            div.innerHTML =
-                '<div class="project-item-name">' + escapeHtml(p.name) + '</div>' +
-                '<div class="project-item-meta">' +
-                    '<span class="status-badge ' + statusClass(p.status) + '">' + escapeHtml(p.status) + '</span>' +
-                    '<span>' + p.emailCount + ' emails</span>' +
-                    '<span>' + formatRelative(p.lastActivityAtUtc) + '</span>' +
-                '</div>';
-            projectList.appendChild(div);
+        } else {
+            for (const p of projects) {
+                const div = document.createElement('div');
+                div.className = 'project-item' + (p.id === currentProjectId ? ' active' : '');
+                div.setAttribute('data-id', p.id);
+                div.onclick = () => loadProjectDetail(p.id);
+                div.innerHTML =
+                    '<div class="project-item-name">' + escapeHtml(p.name) + '</div>' +
+                    '<div class="project-item-meta">' +
+                        '<span class="status-badge ' + statusClass(p.status) + '">' + escapeHtml(p.status) + '</span>' +
+                        '<span>' + p.emailCount + ' emails</span>' +
+                        '<span>' + formatRelative(p.lastActivityAtUtc) + '</span>' +
+                    '</div>';
+                projectList.appendChild(div);
+            }
         }
 
         showStatus('Loaded ' + projects.length + ' projects', 'success');
     } catch (err) {
-        projectList.innerHTML = '';
-        projectList.appendChild(header);
-        projectList.insertAdjacentHTML('beforeend',
-            '<div class="sidebar-empty">Error loading projects</div>');
+        projectList.innerHTML = '<div class="sidebar-header">Projects</div>' +
+            '<div class="sidebar-empty">Error loading projects</div>';
         showStatus('Error: ' + err.message, 'error');
+    }
+
+    loadUnassigned();
+}
+
+// ---- Unassigned inbox ----
+
+async function loadUnassigned() {
+    const orgId = getOrgId();
+    if (!orgId) return;
+
+    unassignedList.innerHTML = '<div class="sidebar-header unassigned-header">Unassigned Inbox</div><div class="loading">Loading...</div>';
+
+    try {
+        const emails = await apiCall('/api/emails/unassigned?organizationId=' + orgId);
+
+        unassignedList.innerHTML = '<div class="sidebar-header unassigned-header">Unassigned (' + emails.length + ')</div>';
+
+        if (emails.length === 0) {
+            unassignedList.insertAdjacentHTML('beforeend',
+                '<div class="sidebar-empty">All emails are assigned</div>');
+            return;
+        }
+
+        for (const e of emails) {
+            const div = document.createElement('div');
+            div.className = 'unassigned-item';
+            div.onclick = () => showUnassignedDetail(e);
+            div.innerHTML =
+                '<div class="project-item-name">' + escapeHtml(e.subject || '(no subject)') + '</div>' +
+                '<div class="project-item-meta">' +
+                    '<span>' + escapeHtml(e.fromName || e.fromEmail) + '</span>' +
+                    '<span>' + formatRelative(e.sentAtUtc) + '</span>' +
+                '</div>';
+            unassignedList.appendChild(div);
+        }
+    } catch (err) {
+        unassignedList.innerHTML = '<div class="sidebar-header unassigned-header">Unassigned Inbox</div>' +
+            '<div class="sidebar-empty">Error loading</div>';
+    }
+}
+
+function showUnassignedDetail(email) {
+    currentProjectId = null;
+    document.querySelectorAll('.project-item').forEach(el => el.classList.remove('active'));
+
+    var projectOptions = cachedProjects.map(p =>
+        '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>'
+    ).join('');
+
+    projectDetail.innerHTML =
+        '<div class="detail-header">' +
+            '<h2>' + escapeHtml(email.subject || '(no subject)') + '</h2>' +
+            '<div class="detail-meta">' +
+                '<span>From: ' + escapeHtml(email.fromName ? email.fromName + ' <' + email.fromEmail + '>' : email.fromEmail) + '</span>' +
+                '<span>Sent: ' + formatDate(email.sentAtUtc) + '</span>' +
+            '</div>' +
+        '</div>' +
+        '<div class="email-card" style="margin-bottom:20px">' +
+            '<div class="email-body">' + escapeHtml(email.bodyPreview) + '</div>' +
+        '</div>' +
+        '<div class="assign-actions">' +
+            '<div class="assign-row">' +
+                '<select id="assignSelect" class="assign-select">' +
+                    '<option value="">-- Select project --</option>' +
+                    projectOptions +
+                '</select>' +
+                '<button class="btn-assign" onclick="assignEmail(\'' + email.id + '\')">Assign</button>' +
+            '</div>' +
+            '<button class="btn-create-project" onclick="createProjectFromEmail(\'' + email.id + '\')">Create New Project</button>' +
+        '</div>';
+}
+
+async function assignEmail(emailId) {
+    var select = document.getElementById('assignSelect');
+    if (!select || !select.value) {
+        showStatus('Select a project first', 'error');
+        return;
+    }
+
+    try {
+        await apiCallJson('/api/emails/' + emailId + '/assign', 'POST', { projectId: select.value });
+        showStatus('Email assigned', 'success');
+        await loadProjects();
+        projectDetail.innerHTML = '<div class="detail-empty">Email assigned successfully</div>';
+    } catch (err) {
+        showStatus('Assign failed: ' + err.message, 'error');
+    }
+}
+
+async function createProjectFromEmail(emailId) {
+    try {
+        const result = await apiCall('/api/emails/' + emailId + '/create-project', 'POST');
+        showStatus('Project created: ' + result.projectName, 'success');
+        await loadProjects();
+        loadProjectDetail(result.projectId);
+    } catch (err) {
+        showStatus('Create failed: ' + err.message, 'error');
     }
 }
 
@@ -117,14 +223,9 @@ async function loadProjects() {
 async function loadProjectDetail(projectId) {
     currentProjectId = projectId;
 
-    // Highlight active item
-    document.querySelectorAll('.project-item').forEach(el => el.classList.remove('active'));
-    const items = document.querySelectorAll('.project-item');
-    for (const item of items) {
-        if (item.onclick && item.onclick.toString().includes(projectId)) {
-            item.classList.add('active');
-        }
-    }
+    document.querySelectorAll('.project-item').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-id') === projectId);
+    });
 
     projectDetail.innerHTML = '<div class="loading">Loading project...</div>';
 
@@ -146,7 +247,6 @@ async function loadProjectDetail(projectId) {
 
         html += '<div id="summaryBlock"></div>';
 
-        // Load existing summary in background
         loadSummary(p.id);
 
         if (p.emails && p.emails.length > 0) {
@@ -229,7 +329,7 @@ async function loadSummary(projectId) {
         const summary = await apiCall('/api/projects/' + projectId + '/summary');
         renderSummary(summary);
     } catch (err) {
-        // No summary yet — that's fine
+        // No summary yet
     }
 }
 

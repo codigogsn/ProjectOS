@@ -50,6 +50,16 @@ public class EmailMessageRepository : IEmailMessageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<EmailMessage>> GetUnassignedWithContactAsync(Guid organizationId, int limit = 100, CancellationToken ct = default)
+    {
+        return await _db.EmailMessages
+            .Include(m => m.FromContact)
+            .Where(m => m.OrganizationId == organizationId && m.ProjectId == null)
+            .OrderByDescending(m => m.SentAtUtc)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> ExistsByProviderMessageIdAsync(string providerMessageId, Guid organizationId, CancellationToken ct = default)
     {
         return await _db.EmailMessages

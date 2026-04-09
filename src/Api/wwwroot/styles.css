@@ -362,6 +362,81 @@ body {
     font-weight: 500;
 }
 
+/* Unassigned section */
+.unassigned-section {
+    border-top: 2px solid var(--border);
+}
+
+.unassigned-header {
+    color: var(--error);
+}
+
+.unassigned-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    border-left: 3px solid transparent;
+}
+
+.unassigned-item:hover {
+    background: var(--surface2);
+    border-left-color: var(--error);
+}
+
+/* Assign actions */
+.assign-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 500px;
+}
+
+.assign-row {
+    display: flex;
+    gap: 8px;
+}
+
+.assign-select {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.btn-assign {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-assign:hover {
+    background: var(--accent-hover);
+}
+
+.btn-create-project {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    width: fit-content;
+}
+
+.btn-create-project:hover {
+    background: var(--border);
+}
+
 .status-badge.active { background: #064e3b; color: #34d399; }
 .status-badge.draft { background: #1e293b; color: #94a3b8; }
 .status-badge.completed { background: #312e81; color: #a5b4fc; }
