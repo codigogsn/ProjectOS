@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using ProjectOS.Application.Common;
 using ProjectOS.Application.Interfaces;
 using ProjectOS.Domain.Entities;
+using ProjectOS.Domain.Enums;
 using ProjectOS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,6 +65,10 @@ public class ProjectSummaryService : IProjectSummaryService
         // Extract and persist action items from PendingItems
         await ExtractActionItemsAsync(projectId, aiResponse.PendingItems, aiResponse.SuggestedNextAction, ct);
 
+        // Update project status based on AI analysis
+        project.Status = MapAiStatusToProjectStatus(aiResponse.CurrentStatus, aiResponse.PendingItems);
+        _db.Projects.Update(project);
+
         await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Summary {SummaryId} generated for project {ProjectId}", summary.Id, projectId);
@@ -121,6 +126,29 @@ public class ProjectSummaryService : IProjectSummaryService
         }
 
         _logger.LogInformation("Extracted {Count} action items for project {ProjectId}", items.Count, projectId);
+    }
+
+    private static ProjectStatus MapAiStatusToProjectStatus(string aiStatus, string pendingItems)
+    {
+        var lower = (aiStatus ?? "").ToLowerInvariant();
+
+        if (lower.Contains("complete") || lower.Contains("done") || lower.Contains("resolved") || lower.Contains("closed"))
+            return ProjectStatus.Completed;
+
+        if (lower.Contains("waiting") || lower.Contains("awaiting") || lower.Contains("no response") || lower.Contains("pending response"))
+            return ProjectStatus.WaitingResponse;
+
+        if (lower.Contains("pending") || lower.Contains("action needed") || lower.Contains("action required") || lower.Contains("blocked"))
+            return ProjectStatus.PendingAction;
+
+        if (lower.Contains("hold") || lower.Contains("paused") || lower.Contains("stalled"))
+            return ProjectStatus.OnHold;
+
+        // If there are pending items, mark as PendingAction
+        if (!string.IsNullOrWhiteSpace(pendingItems) && pendingItems.Contains('-'))
+            return ProjectStatus.PendingAction;
+
+        return ProjectStatus.Active;
     }
 
     private static string FormatEmailContext(List<EmailMessage> emails)

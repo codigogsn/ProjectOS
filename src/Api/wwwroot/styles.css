@@ -525,8 +525,10 @@ body {
     padding: 3px 8px;
 }
 
-.status-badge.active { background: #064e3b; color: #34d399; }
+.status-badge.active { background: #172554; color: #60a5fa; }
 .status-badge.draft { background: #1e293b; color: #94a3b8; }
-.status-badge.completed { background: #312e81; color: #a5b4fc; }
+.status-badge.completed { background: #064e3b; color: #34d399; }
 .status-badge.onhold { background: #422006; color: #fbbf24; }
 .status-badge.cancelled { background: #450a0a; color: #fca5a5; }
+.status-badge.waitingresponse { background: #431407; color: #fb923c; }
+.status-badge.pendingaction { background: #422006; color: #facc15; }
