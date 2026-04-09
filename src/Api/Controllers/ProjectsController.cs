@@ -12,11 +12,16 @@ namespace ProjectOS.Api.Controllers;
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectRepository _projectRepo;
+    private readonly IProjectGroupingService _groupingService;
     private readonly ILogger<ProjectsController> _logger;
 
-    public ProjectsController(IProjectRepository projectRepo, ILogger<ProjectsController> logger)
+    public ProjectsController(
+        IProjectRepository projectRepo,
+        IProjectGroupingService groupingService,
+        ILogger<ProjectsController> logger)
     {
         _projectRepo = projectRepo;
+        _groupingService = groupingService;
         _logger = logger;
     }
 
@@ -32,6 +37,8 @@ public class ProjectsController : ControllerBase
             Status = p.Status.ToString(),
             p.StartDate,
             p.DueDate,
+            p.EmailCount,
+            p.LastActivityAtUtc,
             p.CreatedAtUtc
         }));
     }
@@ -111,6 +118,22 @@ public class ProjectsController : ControllerBase
 
         await _projectRepo.UpdateAsync(project, ct);
         return NoContent();
+    }
+
+    [HttpPost("group")]
+    public async Task<IActionResult> Group([FromQuery] Guid organizationId, CancellationToken ct)
+    {
+        _logger.LogInformation("Project grouping triggered for organization {OrgId}", organizationId);
+
+        var result = await _groupingService.GroupEmailsAsync(organizationId, ct);
+
+        return Ok(new
+        {
+            result.EmailsProcessed,
+            result.AssignedToExisting,
+            result.NewProjectsCreated,
+            Message = $"Grouping complete: {result.AssignedToExisting} assigned to existing, {result.NewProjectsCreated} new projects created"
+        });
     }
 
     [HttpDelete("{id:guid}")]

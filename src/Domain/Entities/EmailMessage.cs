@@ -21,5 +21,8 @@ public class EmailMessage : BaseEntity
 
     public string? ToContactIds { get; set; }
 
+    public decimal? AssignmentConfidence { get; set; }
+    public string? AssignmentSource { get; set; }
+
     public Guid OrganizationId { get; set; }
 }

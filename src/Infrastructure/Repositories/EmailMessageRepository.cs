@@ -32,6 +32,14 @@ public class EmailMessageRepository : IEmailMessageRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<EmailMessage>> GetUnassignedByOrganizationIdAsync(Guid organizationId, CancellationToken ct = default)
+    {
+        return await _db.EmailMessages
+            .Where(m => m.OrganizationId == organizationId && m.ProjectId == null)
+            .OrderBy(m => m.SentAtUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<bool> ExistsByProviderMessageIdAsync(string providerMessageId, Guid organizationId, CancellationToken ct = default)
     {
         return await _db.EmailMessages
@@ -47,6 +55,12 @@ public class EmailMessageRepository : IEmailMessageRepository
     public async Task AddRangeAsync(IEnumerable<EmailMessage> messages, CancellationToken ct = default)
     {
         _db.EmailMessages.AddRange(messages);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateAsync(EmailMessage message, CancellationToken ct = default)
+    {
+        _db.EmailMessages.Update(message);
         await _db.SaveChangesAsync(ct);
     }
 }

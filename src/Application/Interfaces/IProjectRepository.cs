@@ -6,6 +6,8 @@ public interface IProjectRepository
 {
     Task<Project?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<Project>> GetByOrganizationIdAsync(Guid organizationId, CancellationToken ct = default);
+    Task<Project?> FindByThreadIdAsync(string providerThreadId, Guid organizationId, CancellationToken ct = default);
+    Task<List<Project>> FindByNormalizedSubjectAsync(string normalizedSubject, Guid organizationId, CancellationToken ct = default);
     Task AddAsync(Project project, CancellationToken ct = default);
     Task UpdateAsync(Project project, CancellationToken ct = default);
     Task DeleteAsync(Guid id, CancellationToken ct = default);

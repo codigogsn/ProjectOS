@@ -10,6 +10,8 @@ public class Project : BaseEntity
     public DateTime? StartDate { get; set; }
     public DateTime? DueDate { get; set; }
     public DateTime? CompletedAtUtc { get; set; }
+    public DateTime? LastActivityAtUtc { get; set; }
+    public int EmailCount { get; set; }
 
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;

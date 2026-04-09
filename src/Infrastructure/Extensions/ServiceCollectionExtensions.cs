@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         // Services
         services.AddScoped<IGmailService, GmailService>();
         services.AddScoped<IEmailIngestionService, EmailIngestionService>();
+        services.AddScoped<IProjectGroupingService, ProjectGroupingService>();
 
         return services;
     }

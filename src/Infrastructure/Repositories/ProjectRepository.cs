@@ -27,6 +27,27 @@ public class ProjectRepository : IProjectRepository
             .ToListAsync(ct);
     }
 
+    public async Task<Project?> FindByThreadIdAsync(string providerThreadId, Guid organizationId, CancellationToken ct = default)
+    {
+        return await _db.EmailMessages
+            .Where(m => m.ProviderThreadId == providerThreadId
+                        && m.OrganizationId == organizationId
+                        && m.ProjectId != null)
+            .Select(m => m.Project!)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<List<Project>> FindByNormalizedSubjectAsync(string normalizedSubject, Guid organizationId, CancellationToken ct = default)
+    {
+        return await _db.EmailMessages
+            .Where(m => m.NormalizedSubject == normalizedSubject
+                        && m.OrganizationId == organizationId
+                        && m.ProjectId != null)
+            .Select(m => m.Project!)
+            .Distinct()
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(Project project, CancellationToken ct = default)
     {
         _db.Projects.Add(project);

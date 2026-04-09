@@ -61,6 +61,8 @@ public class AppDbContext : DbContext
                 .WithMany(o => o.Projects)
                 .HasForeignKey(x => x.OrganizationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => x.OrganizationId);
         });
 
         // Contact
@@ -93,8 +95,11 @@ public class AppDbContext : DbContext
             e.Property(x => x.ProviderMessageId).HasMaxLength(500);
             e.Property(x => x.ProviderThreadId).HasMaxLength(500);
             e.Property(x => x.ToContactIds).HasMaxLength(4000);
+            e.Property(x => x.AssignmentConfidence).HasPrecision(5, 2);
+            e.Property(x => x.AssignmentSource).HasMaxLength(50);
 
             e.HasIndex(x => x.OrganizationId);
+            e.HasIndex(x => new { x.OrganizationId, x.ProjectId });
             e.HasIndex(x => new { x.OrganizationId, x.ProviderMessageId }).IsUnique()
                 .HasFilter(null);
 
