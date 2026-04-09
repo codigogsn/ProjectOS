@@ -251,8 +251,9 @@ public class EmailsController : ControllerBase
     [HttpPost("backfill-ai")]
     public async Task<IActionResult> BackfillAi(
         [FromQuery] Guid organizationId,
+        [FromQuery] Guid? emailId = null,
         [FromQuery] int limit = 50,
-        [FromQuery] bool onlyNull = true,
+        [FromQuery] bool force = false,
         CancellationToken ct = default)
     {
         if (organizationId == Guid.Empty)
@@ -261,59 +262,80 @@ public class EmailsController : ControllerBase
         var guard = ValidateOrg(organizationId);
         if (guard is not null) return guard;
 
-        if (limit < 1) limit = 1;
-        if (limit > 200) limit = 200;
+        var isSingle = emailId.HasValue && emailId.Value != Guid.Empty;
+        var mode = force ? "force" : "only-null";
+        var scope = isSingle ? "single" : "batch";
 
-        _logger.LogInformation("AI backfill started for org {OrgId}, limit={Limit}, onlyNull={OnlyNull}",
-            organizationId, limit, onlyNull);
+        _logger.LogInformation("AI backfill: mode={Mode}, scope={Scope}, org={OrgId}, emailId={EmailId}, limit={Limit}",
+            mode, scope, organizationId, emailId, limit);
 
-        var query = _db.EmailMessages
-            .Where(e => e.OrganizationId == organizationId);
+        List<EmailMessage> emails;
 
-        if (onlyNull)
-            query = query.Where(e => e.AiSummary == null || e.AiSummary == "Pending");
+        if (isSingle)
+        {
+            var single = await _db.EmailMessages
+                .FirstOrDefaultAsync(e => e.Id == emailId!.Value && e.OrganizationId == organizationId, ct);
 
-        var emails = await query
-            .OrderByDescending(e => e.CreatedAtUtc)
-            .Take(limit)
-            .ToListAsync(ct);
+            if (single is null)
+                return NotFound(new { error = "Email not found in this organization" });
 
-        _logger.LogInformation("Found {Count} emails to backfill", emails.Count);
+            emails = new List<EmailMessage> { single };
+        }
+        else
+        {
+            if (limit < 1) limit = 1;
+            if (limit > 500) limit = 500;
+
+            var query = _db.EmailMessages
+                .Where(e => e.OrganizationId == organizationId);
+
+            if (!force)
+                query = query.Where(e => e.AiSummary == null || e.AiSummary == "Pending");
+
+            emails = await query
+                .OrderByDescending(e => e.CreatedAtUtc)
+                .Take(limit)
+                .ToListAsync(ct);
+        }
+
+        _logger.LogInformation("Backfill: {Count} emails to process (mode={Mode})", emails.Count, mode);
 
         var updated = 0;
         var failed = 0;
+        var skipped = 0;
         var failures = new List<object>();
 
         foreach (var email in emails)
         {
             try
             {
-                _logger.LogDebug("Backfilling AI for email {EmailId}", email.Id);
-
                 await _emailAi.ProcessEmailAsync(email, ct);
                 await _db.SaveChangesAsync(ct);
-
                 updated++;
+
+                _logger.LogDebug("Backfill OK: {EmailId} → cat={Cat}, pri={Pri}",
+                    email.Id, email.AiCategory, email.AiPriority);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "AI backfill failed for email {EmailId}", email.Id);
+                _logger.LogWarning(ex, "Backfill failed for email {EmailId}: {Msg}", email.Id, ex.Message);
                 failed++;
                 failures.Add(new { emailId = email.Id, error = ex.Message });
-
-                // Detach the failed entity to prevent it from blocking subsequent saves
                 _db.Entry(email).State = EntityState.Unchanged;
             }
         }
 
-        _logger.LogInformation("AI backfill complete: {Processed} processed, {Updated} updated, {Failed} failed",
-            emails.Count, updated, failed);
+        _logger.LogInformation("AI backfill complete: processed={Processed}, updated={Updated}, failed={Failed}, skipped={Skipped}, mode={Mode}",
+            emails.Count, updated, failed, skipped, mode);
 
         return Ok(new
         {
             processed = emails.Count,
             updated,
             failed,
+            skipped,
+            mode,
+            scope,
             failures
         });
     }
