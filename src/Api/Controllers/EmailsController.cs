@@ -59,6 +59,65 @@ public class EmailsController : ControllerBase
         });
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetAll([FromQuery] Guid organizationId, CancellationToken ct)
+    {
+        if (organizationId == Guid.Empty)
+            return BadRequest(new { error = "organizationId is required" });
+
+        var guard = ValidateOrg(organizationId);
+        if (guard is not null) return guard;
+
+        var emails = await _emailRepo.GetByOrganizationIdAsync(organizationId, ct);
+
+        _logger.LogInformation("Returning {Count} emails for org {OrgId}", emails.Count, organizationId);
+
+        var result = emails.Take(200).Select(e => new
+        {
+            e.Id,
+            fromEmail = e.FromAddress,
+            e.Subject,
+            bodyPreview = e.Body.Length > 200 ? e.Body[..200] + "..." : e.Body,
+            e.NormalizedSubject,
+            e.ProviderMessageId,
+            e.SentAtUtc,
+            e.CreatedAtUtc,
+            projectId = e.ProjectId,
+            assignmentSource = e.AssignmentSource
+        });
+
+        return Ok(result);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    {
+        var email = await _emailRepo.GetByIdAsync(id, ct);
+        if (email is null)
+            return NotFound(new { error = "Email not found" });
+
+        _logger.LogInformation("Returning email detail {EmailId}", id);
+
+        return Ok(new
+        {
+            email.Id,
+            organizationId = email.OrganizationId,
+            fromEmail = email.FromAddress,
+            toAddress = email.ToAddress,
+            email.Subject,
+            email.NormalizedSubject,
+            email.Body,
+            email.SentAtUtc,
+            email.CreatedAtUtc,
+            gmailMessageId = email.ProviderMessageId,
+            threadId = email.ProviderThreadId,
+            projectId = email.ProjectId,
+            fromContactId = email.FromContactId,
+            assignmentSource = email.AssignmentSource,
+            assignmentConfidence = email.AssignmentConfidence
+        });
+    }
+
     [HttpGet("unassigned")]
     public async Task<IActionResult> GetUnassigned([FromQuery] Guid organizationId, CancellationToken ct)
     {
