@@ -27,13 +27,9 @@ public class EmailAiService
 
     public async Task ProcessEmailAsync(EmailMessage email, CancellationToken ct = default)
     {
-        _logger.LogInformation("EmailAiService.ProcessEmailAsync called for subject: {Subject}", email.Subject);
+        _logger.LogInformation("EmailAiService called for subject: {Subject}", email.Subject);
 
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? _options.ApiKey;
-
-        _logger.LogInformation("OPENAI_API_KEY resolved: {HasKey} (length={Len})",
-            !string.IsNullOrWhiteSpace(apiKey), apiKey?.Length ?? 0);
-
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogWarning("OpenAI API key not configured — setting fallback values");
@@ -44,17 +40,20 @@ public class EmailAiService
             return;
         }
 
-        // Load tone profile for this org (fallback to defaults if missing)
+        // 1. Load tone profile
         var tone = await LoadToneProfileAsync(email.OrganizationId, ct);
 
+        // 2. Detect language from email content
+        var detectedLang = DetectLanguage(email.Subject, email.Body, tone);
+        _logger.LogInformation("Language detected: {Lang} for email from {From}", detectedLang, email.FromAddress);
+
+        // 3. Build prompt
         var bodyTruncated = email.Body.Length > 1500 ? email.Body[..1500] + "..." : email.Body;
+        var toneBlock = BuildToneInstruction(tone);
+        var systemPrompt = BuildSystemPrompt(toneBlock, detectedLang);
 
-        var toneInstruction = BuildToneInstruction(tone);
-
-        var systemPrompt = "You are an email assistant for business operations. Analyze the email and respond with ONLY valid JSON (no code fences):\n" +
-            "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply following the tone profile below\", \"category\": \"sales|support|spam|internal|billing|scheduling\", \"priority\": \"high|medium|low\"}\n\n" +
-            "TONE PROFILE FOR REPLY:\n" + toneInstruction + "\n\n" +
-            "Rules: be concise, match the email language, do not invent facts, do not take autonomous decisions — only suggest.";
+        _logger.LogInformation("AI prompt built — lang={Lang}, tone formality={Formality}, length={Length}",
+            detectedLang, tone.Formality, tone.ResponseLength);
 
         var requestBody = new
         {
@@ -113,8 +112,8 @@ public class EmailAiService
             email.AiCategory = Truncate(parsed?.Category ?? "unknown", 50);
             email.AiPriority = Truncate(parsed?.Priority ?? "medium", 20);
 
-            _logger.LogInformation("AI processed email {EmailId}: category={Category}, priority={Priority}",
-                email.Id, email.AiCategory, email.AiPriority);
+            _logger.LogInformation("AI processed email {EmailId}: cat={Cat}, pri={Pri}, lang={Lang}",
+                email.Id, email.AiCategory, email.AiPriority, detectedLang);
         }
         catch (Exception ex)
         {
@@ -133,14 +132,85 @@ public class EmailAiService
             var profile = await _db.UserToneProfiles
                 .FirstOrDefaultAsync(p => p.OrganizationId == organizationId, ct);
 
-            if (profile is not null) return profile;
+            if (profile is not null)
+            {
+                _logger.LogInformation("Tone profile FOUND for org {OrgId}: formality={F}, length={L}, address={A}, traits={T}",
+                    organizationId, profile.Formality, profile.ResponseLength, profile.AddressStyle, profile.PrimaryTraits);
+                return profile;
+            }
+
+            _logger.LogInformation("No tone profile for org {OrgId} — using defaults", organizationId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to load tone profile — using defaults");
+            _logger.LogWarning(ex, "Failed to load tone profile for org {OrgId} — using defaults", organizationId);
         }
 
-        return new UserToneProfile(); // defaults
+        return new UserToneProfile();
+    }
+
+    private static string DetectLanguage(string subject, string body, UserToneProfile tone)
+    {
+        var sample = (subject + " " + body).ToLowerInvariant();
+
+        // Check for clear English markers
+        var englishWords = new[] { " the ", " is ", " are ", " was ", " were ", " have ", " has ", " will ", " would ", " please ", " thank you ", " regards ", " dear ", " hello ", " hi " };
+        var englishScore = 0;
+        foreach (var w in englishWords)
+            if (sample.Contains(w)) englishScore++;
+
+        // Check for clear Spanish markers
+        var spanishWords = new[] { " el ", " la ", " los ", " las ", " es ", " son ", " tiene ", " hola ", " gracias ", " por favor ", " estimado ", " saludos ", " buenos ", " para ", " que ", " del " };
+        var spanishScore = 0;
+        foreach (var w in spanishWords)
+            if (sample.Contains(w)) spanishScore++;
+
+        // Clear winner
+        if (englishScore >= 3 && englishScore > spanishScore * 2) return "English";
+        if (spanishScore >= 2) return "Spanish";
+        if (englishScore >= 2) return "English";
+
+        // Check writing examples from tone profile
+        var examples = ((tone.Example1 ?? "") + " " + (tone.Example2 ?? "")).ToLowerInvariant();
+        if (examples.Length > 20)
+        {
+            var exEn = 0; var exEs = 0;
+            foreach (var w in englishWords) if (examples.Contains(w)) exEn++;
+            foreach (var w in spanishWords) if (examples.Contains(w)) exEs++;
+            if (exEs > exEn) return "Spanish";
+            if (exEn > exEs) return "English";
+        }
+
+        // Default to Spanish
+        return "Spanish";
+    }
+
+    private static string BuildSystemPrompt(string toneBlock, string language)
+    {
+        return "You are an email assistant for business operations.\n\n" +
+            "Respond with ONLY valid JSON (no code fences, no markdown):\n" +
+            "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply\", \"category\": \"sales|support|spam|internal|billing|scheduling\", \"priority\": \"high|medium|low\"}\n\n" +
+            "═══ CRITICAL LANGUAGE RULE ═══\n" +
+            $"The reply MUST be written in {language}.\n" +
+            $"Do NOT use any language other than {language} for the reply field.\n" +
+            "The summary may be in English for internal use.\n\n" +
+            "═══ TONE PROFILE (MUST FOLLOW STRICTLY) ═══\n" +
+            toneBlock + "\n" +
+            "The reply MUST follow every aspect of this tone profile:\n" +
+            "- Match the specified formality level exactly\n" +
+            "- Respect the response length preference\n" +
+            "- Use the address style specified (tu/usted/neutral)\n" +
+            "- Embody the primary traits listed\n" +
+            "- Avoid the traits listed under 'Avoid'\n" +
+            "- If the sender seems upset, use the specified upset handling style\n" +
+            "- If the email is sales-related, use the specified sales approach\n" +
+            "- Include the signature if one is provided\n" +
+            "- Match the writing style shown in the examples\n\n" +
+            "═══ SAFETY RULES ═══\n" +
+            "- Do not invent facts\n" +
+            "- Do not take autonomous decisions — only suggest\n" +
+            "- Do not hallucinate data not present in the email\n" +
+            "- Be concise and actionable";
     }
 
     private static string BuildToneInstruction(UserToneProfile t)
