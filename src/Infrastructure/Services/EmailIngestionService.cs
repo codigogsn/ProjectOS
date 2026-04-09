@@ -107,25 +107,36 @@ public partial class EmailIngestionService : IEmailIngestionService
                     ProviderThreadId = dto.ThreadId,
                     FromContactId = fromContact.Id,
                     ToContactIds = string.Join(",", toContactIdList),
-                    OrganizationId = organizationId
+                    OrganizationId = organizationId,
+                    // Default AI fields — overwritten below if AI succeeds
+                    AiSummary = "Pending",
+                    AiSuggestedReply = "",
+                    AiCategory = "unknown",
+                    AiPriority = "medium"
                 };
+
+                // AI processing BEFORE save — populates fields in single DB write
+                try
+                {
+                    _logger.LogInformation("AI processing started for email {MessageId}", dto.MessageId);
+                    await _emailAi.ProcessEmailAsync(message, ct);
+                    _logger.LogInformation("AI processing complete for email {MessageId}: category={Cat}, priority={Pri}",
+                        dto.MessageId, message.AiCategory, message.AiPriority);
+                }
+                catch (Exception aiEx)
+                {
+                    _logger.LogWarning(aiEx, "AI processing failed for email {MessageId} — saving with fallback values", dto.MessageId);
+                    message.AiSummary = "AI processing failed";
+                    message.AiSuggestedReply = "";
+                    message.AiCategory = "unknown";
+                    message.AiPriority = "low";
+                }
 
                 await _emailRepo.AddAsync(message, ct);
                 result.Saved++;
 
-                // AI processing — non-blocking, failures logged and skipped
-                try
-                {
-                    await _emailAi.ProcessEmailAsync(message, ct);
-                    await _emailRepo.UpdateAsync(message, ct);
-                    _logger.LogDebug("AI processed email {MessageId}", dto.MessageId);
-                }
-                catch (Exception aiEx)
-                {
-                    _logger.LogWarning(aiEx, "AI processing failed for email {MessageId} — continuing", dto.MessageId);
-                }
-
-                _logger.LogDebug("Saved email {MessageId} — subject: {Subject}", dto.MessageId, subject);
+                _logger.LogDebug("Saved email {MessageId} — subject: {Subject}, ai: {AiCat}/{AiPri}",
+                    dto.MessageId, subject, message.AiCategory, message.AiPriority);
             }
             catch (DbUpdateException ex)
             {

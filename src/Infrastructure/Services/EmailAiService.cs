@@ -23,11 +23,18 @@ public class EmailAiService
 
     public async Task ProcessEmailAsync(EmailMessage email, CancellationToken ct = default)
     {
+        _logger.LogInformation("EmailAiService.ProcessEmailAsync called for subject: {Subject}", email.Subject);
+
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? _options.ApiKey;
+
+        _logger.LogInformation("OPENAI_API_KEY resolved: {HasKey} (length={Len})",
+            !string.IsNullOrWhiteSpace(apiKey), apiKey?.Length ?? 0);
+
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            _logger.LogWarning("OpenAI API key not configured — skipping AI processing");
-            email.AiSummary = "AI unavailable";
+            _logger.LogWarning("OpenAI API key not configured — setting fallback values");
+            email.AiSummary = "AI unavailable — no API key";
+            email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
             return;
@@ -61,6 +68,7 @@ public class EmailAiService
         {
             _logger.LogError("AI email processing failed: {Status}", response.StatusCode);
             email.AiSummary = "AI processing failed";
+            email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
             return;
@@ -98,6 +106,7 @@ public class EmailAiService
         {
             _logger.LogWarning(ex, "Failed to parse AI response for email {EmailId}", email.Id);
             email.AiSummary = "AI parse error";
+            email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
         }
