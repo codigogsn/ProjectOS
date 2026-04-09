@@ -229,6 +229,41 @@ try
                     await cmd.ExecuteNonQueryAsync();
                 }
 
+                // Create UserToneProfiles table if missing
+                using var checkCmd = conn.CreateCommand();
+                checkCmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'UserToneProfiles')";
+                var toneTableExists = checkCmd.ExecuteScalar() is true;
+
+                if (!toneTableExists)
+                {
+                    using var createCmd = conn.CreateCommand();
+                    createCmd.CommandText = """
+                        CREATE TABLE "UserToneProfiles" (
+                            "Id" uuid NOT NULL PRIMARY KEY,
+                            "OrganizationId" uuid NOT NULL,
+                            "Formality" character varying(50) NOT NULL DEFAULT 'professional',
+                            "ResponseLength" character varying(50) NOT NULL DEFAULT 'medium',
+                            "AddressStyle" character varying(50) NOT NULL DEFAULT 'neutral',
+                            "PrimaryTraits" character varying(500) NOT NULL DEFAULT 'clear',
+                            "AvoidTraits" character varying(500) NOT NULL DEFAULT 'robotic',
+                            "UpsetStyle" character varying(50) NOT NULL DEFAULT 'empathetic',
+                            "SalesStyle" character varying(50) NOT NULL DEFAULT 'consultative',
+                            "Signature" character varying(500),
+                            "Example1" character varying(2000),
+                            "Example2" character varying(2000),
+                            "CreatedAtUtc" timestamp without time zone NOT NULL DEFAULT (now() at time zone 'utc'),
+                            "UpdatedAtUtc" timestamp without time zone
+                        )
+                        """;
+                    await createCmd.ExecuteNonQueryAsync();
+
+                    using var idxCmd = conn.CreateCommand();
+                    idxCmd.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_UserToneProfiles_OrganizationId\" ON \"UserToneProfiles\" (\"OrganizationId\")";
+                    await idxCmd.ExecuteNonQueryAsync();
+
+                    Log.Information("UserToneProfiles table created");
+                }
+
                 Log.Information("Schema update check complete — AI columns ensured");
             }
             catch (Exception schemaEx)

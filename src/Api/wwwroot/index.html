@@ -13,6 +13,7 @@
             <nav class="topbar-nav">
                 <button class="nav-tab active" data-view="projects" onclick="switchView('projects')">Projects</button>
                 <button class="nav-tab" data-view="inbox" onclick="switchView('inbox')">Inbox</button>
+                <button class="nav-tab" data-view="style" onclick="switchView('style')">My Style</button>
             </nav>
         </div>
         <div class="topbar-controls">
@@ -47,6 +48,106 @@
             </div>
             <div class="inbox-detail" id="inboxDetail">
                 <div class="detail-empty">Select an email to view</div>
+            </div>
+        </div>
+        <!-- Style view (hidden by default) -->
+        <div class="style-view" id="styleView" style="display:none">
+            <div class="style-container">
+                <div class="style-header">
+                    <h2>My Communication Style</h2>
+                    <p class="style-subtitle">Define how AI generates suggested replies for your emails</p>
+                </div>
+
+                <div class="style-section">
+                    <div class="style-section-title">Tone Basics</div>
+                    <div class="style-grid">
+                        <div class="style-field">
+                            <label>Formality</label>
+                            <select id="toneFormality">
+                                <option value="formal">Formal</option>
+                                <option value="professional" selected>Professional</option>
+                                <option value="casual">Casual</option>
+                                <option value="warm">Warm</option>
+                            </select>
+                        </div>
+                        <div class="style-field">
+                            <label>Response Length</label>
+                            <select id="toneLength">
+                                <option value="short">Short</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="long">Long</option>
+                            </select>
+                        </div>
+                        <div class="style-field">
+                            <label>Address Style</label>
+                            <select id="toneAddress">
+                                <option value="tu">Tu (informal)</option>
+                                <option value="usted">Usted (formal)</option>
+                                <option value="neutral" selected>Neutral</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="style-section">
+                    <div class="style-section-title">Communication Style</div>
+                    <div class="style-grid">
+                        <div class="style-field">
+                            <label>Primary Traits</label>
+                            <input type="text" id="tonePrimaryTraits" placeholder="warm, direct, expert, sales" />
+                        </div>
+                        <div class="style-field">
+                            <label>Avoid</label>
+                            <input type="text" id="toneAvoidTraits" placeholder="robotic, aggressive, vague" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="style-section">
+                    <div class="style-section-title">Situational Behavior</div>
+                    <div class="style-grid">
+                        <div class="style-field">
+                            <label>When Sender is Upset</label>
+                            <select id="toneUpset">
+                                <option value="empathetic" selected>Empathetic</option>
+                                <option value="direct">Direct</option>
+                                <option value="formal">Formal</option>
+                            </select>
+                        </div>
+                        <div class="style-field">
+                            <label>Sales Approach</label>
+                            <select id="toneSales">
+                                <option value="subtle">Subtle</option>
+                                <option value="consultative" selected>Consultative</option>
+                                <option value="aggressive">Aggressive</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="style-section">
+                    <div class="style-section-title">Signature</div>
+                    <div class="style-field" style="max-width:100%">
+                        <input type="text" id="toneSignature" placeholder="Best regards, Your Name" style="width:100%" />
+                    </div>
+                </div>
+
+                <div class="style-section">
+                    <div class="style-section-title">Writing Examples</div>
+                    <div class="style-field" style="max-width:100%">
+                        <label>Example 1</label>
+                        <textarea id="toneExample1" rows="3" placeholder="Paste an example of how you write emails..."></textarea>
+                    </div>
+                    <div class="style-field" style="max-width:100%;margin-top:12px">
+                        <label>Example 2</label>
+                        <textarea id="toneExample2" rows="3" placeholder="Another example..."></textarea>
+                    </div>
+                </div>
+
+                <div class="style-actions">
+                    <button class="btn-save-style" onclick="saveToneProfile()">Save Style</button>
+                    <span class="style-save-status" id="styleSaveStatus"></span>
+                </div>
             </div>
         </div>
     </main>

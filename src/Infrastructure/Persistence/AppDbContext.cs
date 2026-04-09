@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<EmailMessage> EmailMessages => Set<EmailMessage>();
     public DbSet<ProjectSummary> ProjectSummaries => Set<ProjectSummary>();
     public DbSet<ActionItem> ActionItems => Set<ActionItem>();
+    public DbSet<UserToneProfile> UserToneProfiles => Set<UserToneProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -149,6 +150,24 @@ public class AppDbContext : DbContext
                 .WithMany(p => p.ActionItems)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserToneProfile>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.OrganizationId).IsRequired();
+            e.Property(x => x.Formality).IsRequired().HasMaxLength(50);
+            e.Property(x => x.ResponseLength).IsRequired().HasMaxLength(50);
+            e.Property(x => x.AddressStyle).IsRequired().HasMaxLength(50);
+            e.Property(x => x.PrimaryTraits).IsRequired().HasMaxLength(500);
+            e.Property(x => x.AvoidTraits).IsRequired().HasMaxLength(500);
+            e.Property(x => x.UpsetStyle).IsRequired().HasMaxLength(50);
+            e.Property(x => x.SalesStyle).IsRequired().HasMaxLength(50);
+            e.Property(x => x.Signature).HasMaxLength(500);
+            e.Property(x => x.Example1).HasMaxLength(2000);
+            e.Property(x => x.Example2).HasMaxLength(2000);
+
+            e.HasIndex(x => x.OrganizationId).IsUnique();
         });
     }
 

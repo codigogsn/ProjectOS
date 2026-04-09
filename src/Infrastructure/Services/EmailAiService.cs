@@ -1,10 +1,12 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ProjectOS.Application.Common;
 using ProjectOS.Domain.Entities;
+using ProjectOS.Infrastructure.Persistence;
 
 namespace ProjectOS.Infrastructure.Services;
 
@@ -12,12 +14,14 @@ public class EmailAiService
 {
     private readonly HttpClient _httpClient;
     private readonly AiOptions _options;
+    private readonly AppDbContext _db;
     private readonly ILogger<EmailAiService> _logger;
 
-    public EmailAiService(HttpClient httpClient, IOptions<AiOptions> options, ILogger<EmailAiService> logger)
+    public EmailAiService(HttpClient httpClient, IOptions<AiOptions> options, AppDbContext db, ILogger<EmailAiService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _db = db;
         _logger = logger;
     }
 
@@ -40,14 +44,24 @@ public class EmailAiService
             return;
         }
 
+        // Load tone profile for this org (fallback to defaults if missing)
+        var tone = await LoadToneProfileAsync(email.OrganizationId, ct);
+
         var bodyTruncated = email.Body.Length > 1500 ? email.Body[..1500] + "..." : email.Body;
+
+        var toneInstruction = BuildToneInstruction(tone);
+
+        var systemPrompt = "You are an email assistant for business operations. Analyze the email and respond with ONLY valid JSON (no code fences):\n" +
+            "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply following the tone profile below\", \"category\": \"sales|support|spam|internal|billing|scheduling\", \"priority\": \"high|medium|low\"}\n\n" +
+            "TONE PROFILE FOR REPLY:\n" + toneInstruction + "\n\n" +
+            "Rules: be concise, match the email language, do not invent facts, do not take autonomous decisions — only suggest.";
 
         var requestBody = new
         {
             model = _options.Model,
             messages = new[]
             {
-                new { role = "system", content = "You are an email assistant for business operations. Analyze the email and respond with ONLY valid JSON (no code fences):\n{\"summary\": \"1-2 line summary\", \"reply\": \"short professional reply in same language as email\", \"category\": \"sales|support|spam|internal|billing|scheduling\", \"priority\": \"high|medium|low\"}\nRules: be concise, match the email language, do not invent facts." },
+                new { role = "system", content = systemPrompt },
                 new { role = "user", content = $"Subject: {email.Subject}\nFrom: {email.FromAddress}\n\n{bodyTruncated}" }
             },
             max_tokens = 512,
@@ -110,6 +124,46 @@ public class EmailAiService
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
         }
+    }
+
+    private async Task<UserToneProfile> LoadToneProfileAsync(Guid organizationId, CancellationToken ct)
+    {
+        try
+        {
+            var profile = await _db.UserToneProfiles
+                .FirstOrDefaultAsync(p => p.OrganizationId == organizationId, ct);
+
+            if (profile is not null) return profile;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load tone profile — using defaults");
+        }
+
+        return new UserToneProfile(); // defaults
+    }
+
+    private static string BuildToneInstruction(UserToneProfile t)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"- Formality: {t.Formality}");
+        sb.AppendLine($"- Response length: {t.ResponseLength}");
+        sb.AppendLine($"- Address style: {t.AddressStyle}");
+        sb.AppendLine($"- Primary traits: {t.PrimaryTraits}");
+        sb.AppendLine($"- Avoid: {t.AvoidTraits}");
+        sb.AppendLine($"- When sender is upset: be {t.UpsetStyle}");
+        sb.AppendLine($"- Sales approach: {t.SalesStyle}");
+
+        if (!string.IsNullOrWhiteSpace(t.Signature))
+            sb.AppendLine($"- End reply with signature: {t.Signature}");
+
+        if (!string.IsNullOrWhiteSpace(t.Example1))
+            sb.AppendLine($"- Example of user's writing style: \"{t.Example1}\"");
+
+        if (!string.IsNullOrWhiteSpace(t.Example2))
+            sb.AppendLine($"- Another example: \"{t.Example2}\"");
+
+        return sb.ToString();
     }
 
     private static string Truncate(string value, int max) =>

@@ -10,6 +10,7 @@ const sidebarProjects = document.getElementById('sidebarProjects');
 let currentProjectId = null;
 let cachedProjects = [];
 let currentView = 'projects';
+const styleView = document.getElementById('styleView');
 
 // ---- View switching ----
 
@@ -17,20 +18,26 @@ function switchView(view) {
     currentView = view;
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
 
+    sidebarProjects.style.display = 'none';
+    projectDetail.style.display = 'none';
+    inboxView.style.display = 'none';
+    styleView.style.display = 'none';
+
     if (view === 'projects') {
         sidebarProjects.style.display = '';
         projectDetail.style.display = '';
-        inboxView.style.display = 'none';
-    } else {
-        sidebarProjects.style.display = 'none';
-        projectDetail.style.display = 'none';
+    } else if (view === 'inbox') {
         inboxView.style.display = '';
         loadInbox();
+    } else if (view === 'style') {
+        styleView.style.display = '';
+        loadToneProfile();
     }
 }
 
 function loadCurrentView() {
     if (currentView === 'inbox') loadInbox();
+    else if (currentView === 'style') loadToneProfile();
     else loadProjects();
 }
 
@@ -622,6 +629,62 @@ async function loadEmailDetail(emailId) {
     } catch (err) {
         inboxDetail.innerHTML = '<div class="detail-empty-state"><div class="detail-empty-text">Failed to load email</div></div>';
         showStatus('Error: ' + err.message, 'error');
+    }
+}
+
+// ---- Tone Profile ----
+
+async function loadToneProfile() {
+    var orgId = getOrgId();
+    if (!orgId) return;
+
+    try {
+        var p = await apiCall('/api/tone-profile?organizationId=' + orgId);
+        document.getElementById('toneFormality').value = p.formality || 'professional';
+        document.getElementById('toneLength').value = p.responseLength || 'medium';
+        document.getElementById('toneAddress').value = p.addressStyle || 'neutral';
+        document.getElementById('tonePrimaryTraits').value = p.primaryTraits || '';
+        document.getElementById('toneAvoidTraits').value = p.avoidTraits || '';
+        document.getElementById('toneUpset').value = p.upsetStyle || 'empathetic';
+        document.getElementById('toneSales').value = p.salesStyle || 'consultative';
+        document.getElementById('toneSignature').value = p.signature || '';
+        document.getElementById('toneExample1').value = p.example1 || '';
+        document.getElementById('toneExample2').value = p.example2 || '';
+    } catch (err) {
+        showStatus('Failed to load tone profile', 'error');
+    }
+}
+
+async function saveToneProfile() {
+    var orgId = getOrgId();
+    if (!orgId) return;
+
+    var status = document.getElementById('styleSaveStatus');
+    status.textContent = 'Saving...';
+    status.className = 'style-save-status';
+
+    try {
+        await apiCallJson('/api/tone-profile', 'POST', {
+            organizationId: orgId,
+            formality: document.getElementById('toneFormality').value,
+            responseLength: document.getElementById('toneLength').value,
+            addressStyle: document.getElementById('toneAddress').value,
+            primaryTraits: document.getElementById('tonePrimaryTraits').value,
+            avoidTraits: document.getElementById('toneAvoidTraits').value,
+            upsetStyle: document.getElementById('toneUpset').value,
+            salesStyle: document.getElementById('toneSales').value,
+            signature: document.getElementById('toneSignature').value,
+            example1: document.getElementById('toneExample1').value,
+            example2: document.getElementById('toneExample2').value
+        });
+        status.textContent = 'Saved';
+        status.className = 'style-save-status saved';
+        setTimeout(function() { status.textContent = ''; }, 3000);
+        showStatus('Tone profile saved', 'success');
+    } catch (err) {
+        status.textContent = 'Failed';
+        status.className = 'style-save-status failed';
+        showStatus('Save failed: ' + err.message, 'error');
     }
 }
 

@@ -1004,6 +1004,126 @@ body {
     color: #64748b;
 }
 
+/* Style / Tone Profile view */
+.style-view {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+    padding: 32px;
+}
+
+.style-container {
+    max-width: 640px;
+    width: 100%;
+}
+
+.style-header {
+    margin-bottom: 32px;
+}
+
+.style-header h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.style-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+
+.style-section {
+    margin-bottom: 28px;
+}
+
+.style-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.style-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.style-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.style-field label {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.style-field select,
+.style-field input,
+.style-field textarea {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.15s;
+}
+
+.style-field select:focus,
+.style-field input:focus,
+.style-field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.style-field textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.style-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 8px;
+}
+
+.btn-save-style {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    padding: 8px 24px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.btn-save-style:hover {
+    background: var(--accent-hover);
+}
+
+.style-save-status {
+    font-size: 12px;
+    color: var(--text-dim);
+    transition: color 0.15s;
+}
+
+.style-save-status.saved { color: var(--success); }
+.style-save-status.failed { color: var(--error); }
+
 /* Copy button icon */
 .copy-icon {
     font-size: 13px;
