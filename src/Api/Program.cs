@@ -176,16 +176,18 @@ try
 
     app.MapControllers();
 
-    // Auto-migrate on startup
+    // Auto-migrate on startup — force schema creation in production
+    try
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        if (db.Database.IsRelational())
-        {
-            Log.Information("Running database migrations...");
-            await db.Database.MigrateAsync();
-            Log.Information("Database migrations complete");
-        }
+        Log.Information("Attempting database migration...");
+        db.Database.Migrate();
+        Log.Information("Database migration completed successfully");
+    }
+    catch (Exception migrationEx)
+    {
+        Log.Error(migrationEx, "Database migration failed — app will continue but may have errors");
     }
 
     app.Run();
