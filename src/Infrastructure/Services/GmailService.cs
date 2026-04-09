@@ -26,6 +26,19 @@ public class GmailService : IGmailService, IDisposable
 
     public async Task<List<GmailMessageDto>> FetchRecentEmailsAsync(int maxResults = 50, CancellationToken ct = default)
     {
+        // Validate credentials before attempting API call
+        var clientId = _options.ResolveClientId();
+        var clientSecret = _options.ResolveClientSecret();
+        var refreshToken = _options.ResolveRefreshToken();
+
+        if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(refreshToken))
+        {
+            throw new InvalidOperationException(
+                $"Gmail OAuth credentials incomplete — ClientId: {!string.IsNullOrEmpty(clientId)}, ClientSecret: {!string.IsNullOrEmpty(clientSecret)}, RefreshToken: {!string.IsNullOrEmpty(refreshToken)}");
+        }
+
+        _logger.LogInformation("Gmail credentials verified — creating client...");
+
         var service = GetGmailClient();
         var results = new List<GmailMessageDto>();
 
@@ -134,14 +147,21 @@ public class GmailService : IGmailService, IDisposable
 
     private static string DecodeBase64Url(string base64Url)
     {
-        var base64 = base64Url.Replace('-', '+').Replace('_', '/');
-        switch (base64.Length % 4)
+        try
         {
-            case 2: base64 += "=="; break;
-            case 3: base64 += "="; break;
+            var base64 = base64Url.Replace('-', '+').Replace('_', '/');
+            switch (base64.Length % 4)
+            {
+                case 2: base64 += "=="; break;
+                case 3: base64 += "="; break;
+            }
+            var bytes = Convert.FromBase64String(base64);
+            return Encoding.UTF8.GetString(bytes);
         }
-        var bytes = Convert.FromBase64String(base64);
-        return Encoding.UTF8.GetString(bytes);
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private static string ExtractEmailAddress(string headerValue)
