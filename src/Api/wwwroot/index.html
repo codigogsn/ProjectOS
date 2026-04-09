@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectOS</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-left">
+            <h1>ProjectOS</h1>
+        </div>
+        <div class="topbar-controls">
+            <input type="text" id="orgId" placeholder="Organization ID" />
+            <button onclick="syncEmails()">Sync Emails</button>
+            <button onclick="groupProjects()">Group Projects</button>
+            <button onclick="loadProjects()">Refresh</button>
+        </div>
+        <div class="topbar-status" id="statusBar"></div>
+    </header>
+
+    <main class="container">
+        <aside class="sidebar" id="projectList">
+            <div class="sidebar-header">Projects</div>
+            <div class="sidebar-empty">Enter an Organization ID and click Refresh</div>
+        </aside>
+
+        <section class="detail" id="projectDetail">
+            <div class="detail-empty">Select a project to view details</div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

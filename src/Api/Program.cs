@@ -139,6 +139,9 @@ try
     app.UseRateLimiter();
     app.UseCors();
 
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+
     app.UseAuthentication();
     app.UseAuthorization();
 
