@@ -45,10 +45,32 @@ function loadCurrentView() {
 function getOrgId() {
     const val = document.getElementById('orgId').value.trim();
     if (!val) {
-        showStatus('Please enter an Organization ID', 'error');
+        showStatus('Enter a valid Organization ID', 'error');
         return null;
     }
+    // Validate GUID format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+        showStatus('Invalid Organization ID format', 'error');
+        console.warn('Blocked invalid org ID:', val);
+        return null;
+    }
+    // Block obvious placeholders
+    if (val === '00000000-0000-0000-0000-000000000000') {
+        showStatus('Enter a real Organization ID', 'error');
+        console.warn('Blocked empty GUID org ID');
+        return null;
+    }
+    // Persist for next session
+    localStorage.setItem('projectos_org_id', val);
     return val;
+}
+
+function saveOrgId() {
+    var input = document.getElementById('orgId');
+    if (input && input.value.trim()) {
+        localStorage.setItem('projectos_org_id', input.value.trim());
+        showStatus('Organization ID saved', 'success');
+    }
 }
 
 function showStatus(message, type) {
@@ -112,6 +134,15 @@ function handle401(res) {
     }
 }
 
+function parseApiError(text, statusText) {
+    try {
+        var parsed = JSON.parse(text);
+        return parsed.error || parsed.message || parsed.title || statusText;
+    } catch(e) {
+        return text || statusText;
+    }
+}
+
 async function apiCall(url, method) {
     var headers = {};
     var key = getApiKey();
@@ -120,7 +151,7 @@ async function apiCall(url, method) {
     if (!res.ok) {
         handle401(res);
         const text = await res.text();
-        throw new Error(text || res.statusText);
+        throw new Error(parseApiError(text, res.statusText));
     }
     return res.json();
 }
@@ -137,7 +168,7 @@ async function apiCallJson(url, method, body) {
     if (!res.ok) {
         handle401(res);
         const text = await res.text();
-        throw new Error(text || res.statusText);
+        throw new Error(parseApiError(text, res.statusText));
     }
     return res.json();
 }
@@ -1101,11 +1132,16 @@ function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Initialize API key from localStorage
+// Initialize from localStorage
 (function() {
-    var saved = localStorage.getItem('projectos_api_key');
-    if (saved) {
-        var input = document.getElementById('apiKeyInput');
-        if (input) input.value = saved;
+    var savedKey = localStorage.getItem('projectos_api_key');
+    if (savedKey) {
+        var keyInput = document.getElementById('apiKeyInput');
+        if (keyInput) keyInput.value = savedKey;
+    }
+    var savedOrg = localStorage.getItem('projectos_org_id');
+    if (savedOrg) {
+        var orgInput = document.getElementById('orgId');
+        if (orgInput) orgInput.value = savedOrg;
     }
 })();
