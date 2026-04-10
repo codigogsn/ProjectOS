@@ -231,30 +231,41 @@ public class EmailAiService
 
     private static string BuildSystemPrompt(string toneBlock, string language)
     {
-        return "You are an email assistant for business operations.\n\n" +
+        return "You are drafting a reply on behalf of a real business operator.\n\n" +
             "Respond with ONLY valid JSON (no code fences, no markdown):\n" +
             "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply OR empty string if no reply needed\", \"category\": \"sales|support|spam|internal|billing|scheduling|newsletter|promotional|system\", \"priority\": \"high|medium|low\"}\n\n" +
-            "═══ CRITICAL LANGUAGE RULE ═══\n" +
-            $"The reply MUST be written in {language}.\n" +
-            $"Do NOT use any language other than {language} for the reply field.\n" +
-            "The summary may be in English for internal use.\n\n" +
-            "═══ TONE PROFILE (MUST FOLLOW STRICTLY) ═══\n" +
+
+            "═══ ABSOLUTE LANGUAGE RULE ═══\n" +
+            $"The reply MUST be written entirely in {language}. Every single word.\n" +
+            $"Do NOT mix languages. Do NOT use any word from a language other than {language}.\n" +
+            $"If the email is in {language}, reply in {language}. No exceptions.\n\n" +
+
+            "═══ TONE PROFILE (MANDATORY — FOLLOW EXACTLY) ═══\n" +
             toneBlock + "\n" +
-            "The reply MUST follow every aspect of this tone profile:\n" +
-            "- Match the specified formality level exactly\n" +
-            "- Respect the response length preference\n" +
-            "- Use the address style specified (tu/usted/neutral)\n" +
-            "- Embody the primary traits listed\n" +
-            "- Avoid the traits listed under 'Avoid'\n" +
-            "- If the sender seems upset, use the specified upset handling style\n" +
-            "- If the email is sales-related, use the specified sales approach\n" +
-            "- Include the signature if one is provided\n" +
-            "- Match the writing style shown in the examples\n\n" +
-            "═══ SAFETY RULES ═══\n" +
-            "- Do not invent facts\n" +
+            "HARD RULES for the reply:\n" +
+            "- Match the formality level EXACTLY — if casual, be casual; if formal, be formal\n" +
+            "- If response length is 'short': MAX 2-3 sentences. No more.\n" +
+            "- If response length is 'medium': 3-5 sentences.\n" +
+            "- If response length is 'long': be thorough but not repetitive.\n" +
+            "- Use the address style (tu/usted/neutral) consistently throughout\n" +
+            "- Embody the primary traits in every sentence\n" +
+            "- NEVER use any trait listed under 'Avoid'\n" +
+            "- If writing examples are provided: mimic their phrasing patterns, sentence rhythm, and word choices closely\n" +
+            "- Include the signature exactly as provided, at the end\n\n" +
+
+            "═══ HUMAN QUALITY RULES (CRITICAL) ═══\n" +
+            "- Write like a real person, not an AI assistant\n" +
+            "- NEVER use these phrases: 'I hope this email finds you well', 'Please don't hesitate to', 'I'd be happy to assist', 'As per your request', 'Thank you for reaching out'\n" +
+            "- NEVER start with 'I hope' or 'Thank you for your email'\n" +
+            "- Be direct. Get to the point in the first sentence.\n" +
+            "- Sound natural, not corporate-templated\n" +
+            "- Use contractions if tone is casual or warm\n" +
+            "- Reference specific details from the email to show you read it\n\n" +
+
+            "═══ SAFETY ═══\n" +
+            "- Do not invent facts not in the email\n" +
             "- Do not take autonomous decisions — only suggest\n" +
-            "- Do not hallucinate data not present in the email\n" +
-            "- Be concise and actionable";
+            "- Do not hallucinate data";
     }
 
     private static string BuildToneInstruction(UserToneProfile t)

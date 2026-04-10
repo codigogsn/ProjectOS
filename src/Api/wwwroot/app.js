@@ -569,25 +569,62 @@ async function loadInbox() {
 }
 
 function cleanEmailBody(raw) {
-    if (!raw) return '';
+    if (!raw) return { main: '', forwarded: '', links: [] };
     var text = raw;
-    // Strip tracking URLs (long encoded URLs)
-    text = text.replace(/https?:\/\/[^\s]{120,}/g, '[link removed]');
-    // Collapse repeated forward markers
-    text = text.replace(/([-]{3,}\s*Forwarded message\s*[-]{3,}\s*){2,}/gi, '--- Forwarded message ---\n');
-    text = text.replace(/(>{2,}\s*\n?){3,}/g, '>>>\n');
-    // Strip HTML tags if present in plain text
+
+    // Strip HTML
     text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
     text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-    text = text.replace(/<[^>]+>/g, ' ');
-    // Decode common HTML entities
-    text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-    // Collapse excessive whitespace
-    text = text.replace(/[ \t]{4,}/g, '  ');
-    text = text.replace(/\n{4,}/g, '\n\n\n');
-    // Trim leading/trailing
+    text = text.replace(/<br\s*\/?>/gi, '\n');
+    text = text.replace(/<\/?(p|div|tr|li)[^>]*>/gi, '\n');
+    text = text.replace(/<[^>]+>/g, '');
+    text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#\d+;/g, '');
+
+    // Extract real links before cleaning
+    var linkMatches = raw.match(/https?:\/\/[^\s<"')\]]{10,}/g) || [];
+    var links = [];
+    var seen = {};
+    for (var i = 0; i < linkMatches.length; i++) {
+        var u = linkMatches[i];
+        if (u.length > 200 || /utm_|click\.|track\.|redirect\.|unsubscribe|manage.*preferences/i.test(u)) continue;
+        if (!seen[u]) { seen[u] = true; links.push(u); }
+    }
+
+    // Remove tracking URLs
+    text = text.replace(/https?:\/\/[^\s]{80,}/g, '');
+    // Remove medium-length tracking URLs
+    text = text.replace(/https?:\/\/[^\s]*(?:utm_|click\.|track\.|redirect\.|unsubscribe)[^\s]*/gi, '');
+
+    // Remove unsubscribe footers
+    text = text.replace(/(?:to\s+)?unsubscribe[^\n]*\n?/gi, '');
+    text = text.replace(/manage\s+(?:your\s+)?(?:email\s+)?preferences[^\n]*/gi, '');
+    text = text.replace(/view\s+(?:this\s+)?(?:email\s+)?in\s+(?:your\s+)?browser[^\n]*/gi, '');
+    text = text.replace(/you\s+(?:are\s+)?receiving\s+this[^\n]*/gi, '');
+    text = text.replace(/if\s+you\s+no\s+longer\s+wish[^\n]*/gi, '');
+
+    // Detect forwarded section
+    var forwarded = '';
+    var fwdMatch = text.match(/([-]{3,}\s*(?:Forwarded|Reenviad)[^\n]*[-]{3,}[\s\S]*)/i);
+    if (fwdMatch) {
+        forwarded = fwdMatch[1].trim();
+        text = text.substring(0, fwdMatch.index).trim();
+    }
+
+    // Collapse quoted blocks
+    text = text.replace(/(^>.*\n?){5,}/gm, '> [...quoted text collapsed...]\n');
+
+    // Collapse whitespace
+    text = text.replace(/[ \t]{3,}/g, ' ');
+    text = text.replace(/\n{4,}/g, '\n\n');
     text = text.trim();
-    return text;
+
+    // Clean forwarded too
+    if (forwarded) {
+        forwarded = forwarded.replace(/https?:\/\/[^\s]{80,}/g, '');
+        forwarded = forwarded.replace(/[ \t]{3,}/g, ' ').replace(/\n{4,}/g, '\n\n').trim();
+    }
+
+    return { main: text, forwarded: forwarded, links: links.slice(0, 5) };
 }
 
 async function loadEmailDetail(emailId) {
@@ -607,7 +644,7 @@ async function loadEmailDetail(emailId) {
         var hasSummary = e.aiSummary && e.aiSummary !== 'Pending' && e.aiSummary !== 'AI unavailable' && e.aiSummary !== 'AI processing failed';
         var hasReply = e.aiSuggestedReply && e.aiSuggestedReply.length > 0;
         var hasAi = hasSummary || hasReply;
-        var cleanBody = cleanEmailBody(e.body);
+        var cleaned = cleanEmailBody(e.body);
 
         var html = '<div class="detail-fadein">';
 
@@ -662,11 +699,30 @@ async function loadEmailDetail(emailId) {
             '<button class="btn-copy-reply" onclick="copyEditorText()"><span class="copy-icon">&#x2398;</span> Copy</button>' +
         '</div></div>';
 
-        // Original email body
-        html += '<div class="inbox-detail-section">' +
-            '<div class="inbox-detail-section-title">Original Email</div>' +
-            '<div class="inbox-detail-body email-body-clean">' + escapeHtml(cleanBody) + '</div>' +
-        '</div>';
+        // Original email body — collapsible clean rendering
+        html += '<div class="email-body-section">' +
+            '<button class="email-body-toggle" onclick="toggleEmailBody(this)">Show original email</button>' +
+            '<div class="email-body-collapsible" style="display:none">' +
+                '<div class="email-body-clean">' + escapeHtml(cleaned.main || '') + '</div>';
+
+        if (cleaned.forwarded) {
+            html += '<div class="email-fwd-section">' +
+                '<button class="email-fwd-toggle" onclick="toggleFwd(this)">Show forwarded content</button>' +
+                '<div class="email-fwd-content" style="display:none">' + escapeHtml(cleaned.forwarded) + '</div>' +
+            '</div>';
+        }
+
+        if (cleaned.links && cleaned.links.length > 0) {
+            html += '<div class="email-links-section">' +
+                '<button class="email-links-toggle" onclick="toggleLinks(this)">Show links (' + cleaned.links.length + ')</button>' +
+                '<div class="email-links-list" style="display:none">';
+            for (var li = 0; li < cleaned.links.length; li++) {
+                html += '<a class="email-link-item" href="' + escapeHtml(cleaned.links[li]) + '" target="_blank" rel="noopener">' + escapeHtml(cleaned.links[li].length > 60 ? cleaned.links[li].substring(0, 60) + '...' : cleaned.links[li]) + '</a>';
+            }
+            html += '</div></div>';
+        }
+
+        html += '</div></div>';
 
         html += '</div>';
         inboxDetail.innerHTML = html;
@@ -708,6 +764,22 @@ function copyEditorText() {
     navigator.clipboard.writeText(editor.value).then(function() {
         showStatus('Reply copied', 'success');
     });
+}
+
+function toggleEmailBody(btn) {
+    var content = btn.nextElementSibling;
+    if (content.style.display === 'none') { content.style.display = ''; btn.textContent = 'Hide original email'; }
+    else { content.style.display = 'none'; btn.textContent = 'Show original email'; }
+}
+function toggleFwd(btn) {
+    var content = btn.nextElementSibling;
+    if (content.style.display === 'none') { content.style.display = ''; btn.textContent = 'Hide forwarded content'; }
+    else { content.style.display = 'none'; btn.textContent = 'Show forwarded content'; }
+}
+function toggleLinks(btn) {
+    var content = btn.nextElementSibling;
+    if (content.style.display === 'none') { content.style.display = ''; btn.textContent = 'Hide links'; }
+    else { content.style.display = 'none'; btn.textContent = 'Show links'; }
 }
 
 // ---- AI Reprocessing ----
