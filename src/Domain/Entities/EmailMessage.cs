@@ -26,6 +26,8 @@ public class EmailMessage : BaseEntity
 
     public string? AiSummary { get; set; }
     public string? AiSuggestedReply { get; set; }
+    public string? AiReplyVariants { get; set; }
+    public string? AiReplyIntent { get; set; }
     public string? AiCategory { get; set; }
     public string? AiPriority { get; set; }
 

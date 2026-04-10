@@ -129,6 +129,8 @@ public class EmailsController : ControllerBase
             assignmentConfidence = email.AssignmentConfidence,
             aiSummary = email.AiSummary,
             aiSuggestedReply = email.AiSuggestedReply,
+            aiReplyVariants = email.AiReplyVariants,
+            aiReplyIntent = email.AiReplyIntent,
             aiCategory = email.AiCategory,
             aiPriority = email.AiPriority
         });

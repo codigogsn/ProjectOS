@@ -1087,6 +1087,65 @@ body {
     color: var(--text-dim);
 }
 
+/* Variant chips */
+.variant-chips {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.variant-chip {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 14px;
+    border-radius: 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.variant-chip:hover {
+    border-color: var(--text-dim);
+    color: var(--text);
+}
+
+.variant-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* Intent badges */
+.intent-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 8px;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.intent-no {
+    background: #1e293b;
+    color: #64748b;
+}
+
+.intent-optional {
+    background: #422006;
+    color: #fbbf24;
+}
+
+.reply-not-needed {
+    padding: 10px 16px;
+    font-size: 12px;
+    color: #64748b;
+    font-style: italic;
+    border-bottom: 1px solid var(--border);
+}
+
 .reply-editor-textarea {
     width: 100%;
     background: #0a0e17;

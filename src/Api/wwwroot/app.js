@@ -676,19 +676,39 @@ async function loadEmailDetail(emailId) {
             '</div>' +
         '</div></div>';
 
+        // Parse variants
+        var variants = null;
+        try { if (e.aiReplyVariants) variants = JSON.parse(e.aiReplyVariants); } catch(ex) {}
+
+        var replyIntent = e.aiReplyIntent || '';
+        var intentBadge = '';
+        if (replyIntent === 'no_reply') intentBadge = '<span class="intent-badge intent-no">No reply needed</span>';
+        else if (replyIntent === 'optional') intentBadge = '<span class="intent-badge intent-optional">Reply optional</span>';
+
         // Reply editor
         html += '<div class="reply-editor-card">' +
             '<div class="reply-editor-header">' +
-                '<span class="reply-editor-title">Reply</span>' +
+                '<span class="reply-editor-title">Reply ' + intentBadge + '</span>' +
                 '<span class="reply-editor-to">To: ' + escapeHtml(e.fromEmail) + '</span>' +
             '</div>';
 
-        if (hasReply) {
+        if (variants && (variants.concise || variants.balanced || variants.warmer)) {
+            html += '<div class="variant-chips">' +
+                '<button class="variant-chip active" data-variant="balanced" onclick="selectVariant(this, \'balanced\')">Balanced</button>' +
+                '<button class="variant-chip" data-variant="concise" onclick="selectVariant(this, \'concise\')">Concise</button>' +
+                '<button class="variant-chip" data-variant="warmer" onclick="selectVariant(this, \'warmer\')">Warmer</button>' +
+                '<span id="variantData" style="display:none">' + escapeHtml(JSON.stringify(variants)) + '</span>' +
+            '</div>';
+            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="6">' + escapeHtml(variants.balanced || e.aiSuggestedReply || '') + '</textarea>';
+        } else if (hasReply) {
             html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="6">' + escapeHtml(e.aiSuggestedReply) + '</textarea>';
+        } else if (hasSummary && replyIntent === 'no_reply') {
+            html += '<div class="reply-not-needed">This email does not require a reply.</div>';
+            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="3" placeholder="Write a reply anyway if needed..."></textarea>';
         } else if (hasSummary) {
             html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="4" placeholder="No AI suggestion — write your reply here..."></textarea>';
         } else {
-            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="4" placeholder="AI analysis pending... You can still write manually."></textarea>';
+            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="4" placeholder="AI analysis pending..."></textarea>';
         }
 
         html += '<div class="reply-editor-actions">' +
@@ -756,6 +776,18 @@ async function sendReply(emailId) {
     } finally {
         if (btn) { btn.textContent = 'Send'; btn.disabled = false; }
     }
+}
+
+function selectVariant(btn, type) {
+    document.querySelectorAll('.variant-chip').forEach(function(c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    var dataEl = document.getElementById('variantData');
+    if (!dataEl) return;
+    try {
+        var v = JSON.parse(dataEl.textContent);
+        var editor = document.getElementById('replyEditor');
+        if (editor) editor.value = v[type] || '';
+    } catch(ex) {}
 }
 
 function copyEditorText() {

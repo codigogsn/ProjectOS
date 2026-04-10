@@ -219,7 +219,9 @@ try
                     "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiSummary\" character varying(2000)",
                     "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiSuggestedReply\" character varying(2000)",
                     "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiCategory\" character varying(50)",
-                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiPriority\" character varying(20)"
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiPriority\" character varying(20)",
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiReplyVariants\" text",
+                    "ALTER TABLE \"EmailMessages\" ADD COLUMN IF NOT EXISTS \"AiReplyIntent\" character varying(50)"
                 };
 
                 foreach (var sql in alterStatements)

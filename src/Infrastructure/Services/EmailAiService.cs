@@ -32,28 +32,24 @@ public class EmailAiService
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? _options.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            _logger.LogWarning("OpenAI API key not configured — setting fallback values");
             email.AiSummary = "AI unavailable — no API key";
             email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
+            email.AiReplyIntent = "unknown";
             return;
         }
 
-        // 1. Load tone profile
         var tone = await LoadToneProfileAsync(email.OrganizationId, ct);
-
-        // 2. Detect language from email content
         var detectedLang = DetectLanguage(email.Subject, email.Body, tone);
-        _logger.LogInformation("Language detected: {Lang} for email from {From}", detectedLang, email.FromAddress);
+        var isForward = DetectForward(email.Subject, email.Body);
 
-        // 3. Build prompt
+        _logger.LogInformation("Processing email: lang={Lang}, forward={Fwd}, from={From}",
+            detectedLang, isForward, email.FromAddress);
+
         var bodyTruncated = email.Body.Length > 1500 ? email.Body[..1500] + "..." : email.Body;
         var toneBlock = BuildToneInstruction(tone);
-        var systemPrompt = BuildSystemPrompt(toneBlock, detectedLang);
-
-        _logger.LogInformation("AI prompt built — lang={Lang}, tone formality={Formality}, length={Length}",
-            detectedLang, tone.Formality, tone.ResponseLength);
+        var systemPrompt = BuildSystemPrompt(toneBlock, detectedLang, isForward);
 
         var requestBody = new
         {
@@ -63,8 +59,8 @@ public class EmailAiService
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = $"Subject: {email.Subject}\nFrom: {email.FromAddress}\n\n{bodyTruncated}" }
             },
-            max_tokens = 512,
-            temperature = 0.2
+            max_tokens = 900,
+            temperature = 0.35
         };
 
         var json = JsonSerializer.Serialize(requestBody);
@@ -84,6 +80,7 @@ public class EmailAiService
             email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
+            email.AiReplyIntent = "unknown";
             return;
         }
 
@@ -110,25 +107,37 @@ public class EmailAiService
             email.AiSummary = Truncate(parsed?.Summary ?? "No summary", 2000);
             email.AiCategory = Truncate(parsed?.Category ?? "unknown", 50);
             email.AiPriority = Truncate(parsed?.Priority ?? "medium", 20);
+            email.AiReplyIntent = Truncate(parsed?.ReplyIntent ?? "direct", 50);
 
-            // Reply-worthiness: suppress reply for non-actionable emails
+            // Reply-worthiness
             var noReplyCategories = new[] { "spam", "newsletter", "promotional", "system" };
             var cat = email.AiCategory.ToLowerInvariant();
-            var needsReply = !noReplyCategories.Contains(cat) && !IsNoReplyEmail(email);
+            var intent = (email.AiReplyIntent ?? "").ToLowerInvariant();
+            var needsReply = !noReplyCategories.Contains(cat) && !IsNoReplyEmail(email) && intent != "no_reply";
 
             if (needsReply)
             {
-                email.AiSuggestedReply = Truncate(parsed?.Reply ?? "", 2000);
+                // Store balanced as main reply
+                email.AiSuggestedReply = Truncate(parsed?.ReplyBalanced ?? parsed?.Reply ?? "", 2000);
+
+                // Store all 3 variants as JSON
+                var variants = new
+                {
+                    concise = parsed?.ReplyConcise ?? "",
+                    balanced = parsed?.ReplyBalanced ?? parsed?.Reply ?? "",
+                    warmer = parsed?.ReplyWarmer ?? ""
+                };
+                email.AiReplyVariants = JsonSerializer.Serialize(variants);
             }
             else
             {
                 email.AiSuggestedReply = null;
-                _logger.LogInformation("Reply suppressed for email {EmailId} — category={Cat}, no-reply={IsNoReply}",
-                    email.Id, cat, !needsReply);
+                email.AiReplyVariants = null;
+                _logger.LogInformation("Reply suppressed: cat={Cat}, intent={Intent}", cat, intent);
             }
 
-            _logger.LogInformation("AI processed email {EmailId}: cat={Cat}, pri={Pri}, lang={Lang}, replyNeeded={Reply}",
-                email.Id, email.AiCategory, email.AiPriority, detectedLang, needsReply);
+            _logger.LogInformation("AI done {EmailId}: cat={Cat}, pri={Pri}, intent={Intent}, hasVariants={V}",
+                email.Id, email.AiCategory, email.AiPriority, email.AiReplyIntent, email.AiReplyVariants != null);
         }
         catch (Exception ex)
         {
@@ -137,7 +146,17 @@ public class EmailAiService
             email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
             email.AiPriority = "medium";
+            email.AiReplyIntent = "unknown";
         }
+    }
+
+    private static bool DetectForward(string subject, string body)
+    {
+        var subLower = (subject ?? "").ToLowerInvariant();
+        if (subLower.StartsWith("fwd:") || subLower.StartsWith("fw:") || subLower.StartsWith("reenviad"))
+            return true;
+        var bodyLower = (body ?? "").ToLowerInvariant();
+        return bodyLower.Contains("---------- forwarded message") || bodyLower.Contains("--- forwarded") || bodyLower.Contains("--- mensaje reenviado");
     }
 
     private static bool IsNoReplyEmail(EmailMessage email)
@@ -146,12 +165,10 @@ public class EmailAiService
         var subject = (email.Subject ?? "").ToLowerInvariant();
         var body = (email.Body ?? "").ToLowerInvariant();
 
-        // No-reply sender addresses
         if (from.Contains("noreply") || from.Contains("no-reply") || from.Contains("donotreply") ||
             from.Contains("mailer-daemon") || from.Contains("postmaster@") || from.Contains("notifications@"))
             return true;
 
-        // Newsletter/promotional signals in body
         var promoSignals = new[] { "unsubscribe", "click here to unsubscribe", "manage your preferences",
             "view in browser", "email preferences", "opt out", "you are receiving this" };
         var promoCount = 0;
@@ -159,7 +176,6 @@ public class EmailAiService
             if (body.Contains(s)) promoCount++;
         if (promoCount >= 2) return true;
 
-        // Automated system emails
         var systemSubjects = new[] { "password reset", "verify your email", "login alert",
             "security alert", "order confirmation", "shipping notification", "delivery update",
             "payment receipt", "invoice #", "subscription", "your receipt" };
@@ -175,46 +191,30 @@ public class EmailAiService
         {
             var profile = await _db.UserToneProfiles
                 .FirstOrDefaultAsync(p => p.OrganizationId == organizationId, ct);
-
             if (profile is not null)
             {
-                _logger.LogInformation("Tone profile FOUND for org {OrgId}: formality={F}, length={L}, address={A}, traits={T}",
-                    organizationId, profile.Formality, profile.ResponseLength, profile.AddressStyle, profile.PrimaryTraits);
+                _logger.LogInformation("Tone profile loaded: formality={F}, traits={T}", profile.Formality, profile.PrimaryTraits);
                 return profile;
             }
-
-            _logger.LogInformation("No tone profile for org {OrgId} — using defaults", organizationId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to load tone profile for org {OrgId} — using defaults", organizationId);
+            _logger.LogWarning(ex, "Failed to load tone profile — using defaults");
         }
-
         return new UserToneProfile();
     }
 
     private static string DetectLanguage(string subject, string body, UserToneProfile tone)
     {
         var sample = (subject + " " + body).ToLowerInvariant();
-
-        // Check for clear English markers
         var englishWords = new[] { " the ", " is ", " are ", " was ", " were ", " have ", " has ", " will ", " would ", " please ", " thank you ", " regards ", " dear ", " hello ", " hi " };
-        var englishScore = 0;
-        foreach (var w in englishWords)
-            if (sample.Contains(w)) englishScore++;
-
-        // Check for clear Spanish markers
         var spanishWords = new[] { " el ", " la ", " los ", " las ", " es ", " son ", " tiene ", " hola ", " gracias ", " por favor ", " estimado ", " saludos ", " buenos ", " para ", " que ", " del " };
-        var spanishScore = 0;
-        foreach (var w in spanishWords)
-            if (sample.Contains(w)) spanishScore++;
-
-        // Clear winner
-        if (englishScore >= 3 && englishScore > spanishScore * 2) return "English";
-        if (spanishScore >= 2) return "Spanish";
-        if (englishScore >= 2) return "English";
-
-        // Check writing examples from tone profile
+        var en = 0; var es = 0;
+        foreach (var w in englishWords) if (sample.Contains(w)) en++;
+        foreach (var w in spanishWords) if (sample.Contains(w)) es++;
+        if (en >= 3 && en > es * 2) return "English";
+        if (es >= 2) return "Spanish";
+        if (en >= 2) return "English";
         var examples = ((tone.Example1 ?? "") + " " + (tone.Example2 ?? "")).ToLowerInvariant();
         if (examples.Length > 20)
         {
@@ -224,46 +224,60 @@ public class EmailAiService
             if (exEs > exEn) return "Spanish";
             if (exEn > exEs) return "English";
         }
-
-        // Default to Spanish
         return "Spanish";
     }
 
-    private static string BuildSystemPrompt(string toneBlock, string language)
+    private static string BuildSystemPrompt(string toneBlock, string language, bool isForward)
     {
-        return "You are drafting a reply on behalf of a real business operator.\n\n" +
-            "Respond with ONLY valid JSON (no code fences, no markdown):\n" +
-            "{\"summary\": \"1-2 line summary\", \"reply\": \"suggested reply OR empty string if no reply needed\", \"category\": \"sales|support|spam|internal|billing|scheduling|newsletter|promotional|system\", \"priority\": \"high|medium|low\"}\n\n" +
+        var forwardContext = isForward
+            ? "\n═══ FORWARD CONTEXT ═══\n" +
+              "This email is FORWARDED content. The sender is sharing something, not writing to you directly.\n" +
+              "- Determine if a reply to the SENDER (the forwarder) is needed\n" +
+              "- Do NOT reply to the original author of the forwarded content\n" +
+              "- If it's shared for awareness only: set reply_intent to 'optional'\n" +
+              "- If it clearly asks for input: reply to the forwarder about the forwarded topic\n\n"
+            : "";
+
+        return "You are drafting replies on behalf of a real business operator. Write like the actual operator, not like an AI, customer support macro, or generic template.\n\n" +
+            "Respond with ONLY valid JSON (no code fences):\n" +
+            "{\n" +
+            "  \"summary\": \"1-2 line summary\",\n" +
+            "  \"reply_concise\": \"shortest useful reply (1-2 sentences)\",\n" +
+            "  \"reply_balanced\": \"standard reply (3-5 sentences)\",\n" +
+            "  \"reply_warmer\": \"warmer, more personal variant\",\n" +
+            "  \"reply_intent\": \"direct|optional|no_reply\",\n" +
+            "  \"category\": \"sales|support|spam|internal|billing|scheduling|newsletter|promotional|system\",\n" +
+            "  \"priority\": \"high|medium|low\"\n" +
+            "}\n\n" +
+
+            forwardContext +
 
             "═══ ABSOLUTE LANGUAGE RULE ═══\n" +
-            $"The reply MUST be written entirely in {language}. Every single word.\n" +
-            $"Do NOT mix languages. Do NOT use any word from a language other than {language}.\n" +
-            $"If the email is in {language}, reply in {language}. No exceptions.\n\n" +
+            $"ALL three reply variants MUST be written entirely in {language}. Every word. No exceptions.\n" +
+            $"Do NOT use any word from a language other than {language}.\n\n" +
 
-            "═══ TONE PROFILE (MANDATORY — FOLLOW EXACTLY) ═══\n" +
+            "═══ TONE PROFILE (MANDATORY) ═══\n" +
             toneBlock + "\n" +
-            "HARD RULES for the reply:\n" +
-            "- Match the formality level EXACTLY — if casual, be casual; if formal, be formal\n" +
-            "- If response length is 'short': MAX 2-3 sentences. No more.\n" +
-            "- If response length is 'medium': 3-5 sentences.\n" +
-            "- If response length is 'long': be thorough but not repetitive.\n" +
-            "- Use the address style (tu/usted/neutral) consistently throughout\n" +
-            "- Embody the primary traits in every sentence\n" +
-            "- NEVER use any trait listed under 'Avoid'\n" +
-            "- If writing examples are provided: mimic their phrasing patterns, sentence rhythm, and word choices closely\n" +
-            "- Include the signature exactly as provided, at the end\n\n" +
+            "HARD RULES:\n" +
+            "- All 3 variants must follow this tone profile\n" +
+            "- reply_concise: MAX 1-2 sentences. Ultra direct.\n" +
+            "- reply_balanced: 3-5 sentences. Clear and complete.\n" +
+            "- reply_warmer: Same content as balanced but with more warmth, empathy, personal touch.\n" +
+            "- Each variant must have a DIFFERENT opening line\n" +
+            "- If writing examples exist: mimic their phrasing, rhythm, and word choices\n" +
+            "- Include signature at the end of each variant if provided\n\n" +
 
-            "═══ HUMAN QUALITY RULES (CRITICAL) ═══\n" +
-            "- Write like a real person, not an AI assistant\n" +
-            "- NEVER use these phrases: 'I hope this email finds you well', 'Please don't hesitate to', 'I'd be happy to assist', 'As per your request', 'Thank you for reaching out'\n" +
+            "═══ HUMAN QUALITY (CRITICAL) ═══\n" +
+            "- BANNED phrases: 'I hope this email finds you well', 'Please don't hesitate', 'I'd be happy to assist', 'As per your request', 'Thank you for reaching out', 'I wanted to follow up'\n" +
             "- NEVER start with 'I hope' or 'Thank you for your email'\n" +
-            "- Be direct. Get to the point in the first sentence.\n" +
+            "- Get to the point immediately\n" +
+            "- Reference specific details from the email\n" +
             "- Sound natural, not corporate-templated\n" +
-            "- Use contractions if tone is casual or warm\n" +
-            "- Reference specific details from the email to show you read it\n\n" +
+            "- Do not repeat the summary in the reply\n" +
+            "- Do not over-explain\n\n" +
 
             "═══ SAFETY ═══\n" +
-            "- Do not invent facts not in the email\n" +
+            "- Do not invent facts\n" +
             "- Do not take autonomous decisions — only suggest\n" +
             "- Do not hallucinate data";
     }
@@ -278,16 +292,12 @@ public class EmailAiService
         sb.AppendLine($"- Avoid: {t.AvoidTraits}");
         sb.AppendLine($"- When sender is upset: be {t.UpsetStyle}");
         sb.AppendLine($"- Sales approach: {t.SalesStyle}");
-
         if (!string.IsNullOrWhiteSpace(t.Signature))
-            sb.AppendLine($"- End reply with signature: {t.Signature}");
-
+            sb.AppendLine($"- Signature: {t.Signature}");
         if (!string.IsNullOrWhiteSpace(t.Example1))
-            sb.AppendLine($"- Example of user's writing style: \"{t.Example1}\"");
-
+            sb.AppendLine($"- Writing example 1: \"{t.Example1}\"");
         if (!string.IsNullOrWhiteSpace(t.Example2))
-            sb.AppendLine($"- Another example: \"{t.Example2}\"");
-
+            sb.AppendLine($"- Writing example 2: \"{t.Example2}\"");
         return sb.ToString();
     }
 
@@ -298,6 +308,10 @@ public class EmailAiService
     {
         public string? Summary { get; set; }
         public string? Reply { get; set; }
+        public string? ReplyConcise { get; set; }
+        public string? ReplyBalanced { get; set; }
+        public string? ReplyWarmer { get; set; }
+        public string? ReplyIntent { get; set; }
         public string? Category { get; set; }
         public string? Priority { get; set; }
     }
