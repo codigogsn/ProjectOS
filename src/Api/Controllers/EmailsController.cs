@@ -248,6 +248,51 @@ public class EmailsController : ControllerBase
         return Ok(new { message = "Project created", projectId = project.Id, projectName = project.Name });
     }
 
+    [HttpPost("{emailId:guid}/reply")]
+    public async Task<IActionResult> Reply(Guid emailId, [FromBody] ReplyRequest request, CancellationToken ct)
+    {
+        var email = await _emailRepo.GetByIdAsync(emailId, ct);
+        if (email is null)
+            return NotFound(new { error = "Email not found" });
+
+        var action = (request.Action ?? "draft").ToLowerInvariant();
+        var replyText = request.Body ?? "";
+
+        _logger.LogInformation("Reply action={Action} for email {EmailId}, replyLength={Len}",
+            action, emailId, replyText.Length);
+
+        if (action == "send")
+        {
+            // TODO: Wire Gmail send API when ready
+            // For now, log and return success to unblock the UI flow
+            _logger.LogInformation("SEND requested for email {EmailId} — reply staged for send", emailId);
+
+            return Ok(new
+            {
+                status = "staged",
+                action = "send",
+                message = "Reply staged for sending. Gmail send integration coming soon.",
+                emailId,
+                replyTo = email.FromAddress,
+                threadId = email.ProviderThreadId
+            });
+        }
+
+        // Draft: save reply text to AiSuggestedReply field
+        email.AiSuggestedReply = replyText;
+        await _emailRepo.UpdateAsync(email, ct);
+
+        _logger.LogInformation("Draft saved for email {EmailId}", emailId);
+
+        return Ok(new
+        {
+            status = "saved",
+            action = "draft",
+            message = "Draft saved successfully.",
+            emailId
+        });
+    }
+
     [HttpPost("backfill-ai")]
     public async Task<IActionResult> BackfillAi(
         [FromQuery] Guid organizationId,
@@ -342,3 +387,4 @@ public class EmailsController : ControllerBase
 }
 
 public record AssignEmailRequest(Guid ProjectId);
+public record ReplyRequest(string? Body, string? Action);

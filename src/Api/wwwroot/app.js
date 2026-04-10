@@ -333,6 +333,7 @@ async function syncEmails() {
         // Force refresh whichever view is active
         if (currentView === 'inbox') {
             await loadInbox();
+            if (currentEmailId) await loadEmailDetail(currentEmailId);
         } else {
             await loadProjects();
         }
@@ -567,6 +568,28 @@ async function loadInbox() {
     }
 }
 
+function cleanEmailBody(raw) {
+    if (!raw) return '';
+    var text = raw;
+    // Strip tracking URLs (long encoded URLs)
+    text = text.replace(/https?:\/\/[^\s]{120,}/g, '[link removed]');
+    // Collapse repeated forward markers
+    text = text.replace(/([-]{3,}\s*Forwarded message\s*[-]{3,}\s*){2,}/gi, '--- Forwarded message ---\n');
+    text = text.replace(/(>{2,}\s*\n?){3,}/g, '>>>\n');
+    // Strip HTML tags if present in plain text
+    text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+    text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    text = text.replace(/<[^>]+>/g, ' ');
+    // Decode common HTML entities
+    text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    // Collapse excessive whitespace
+    text = text.replace(/[ \t]{4,}/g, '  ');
+    text = text.replace(/\n{4,}/g, '\n\n\n');
+    // Trim leading/trailing
+    text = text.trim();
+    return text;
+}
+
 async function loadEmailDetail(emailId) {
     currentEmailId = emailId;
     document.querySelectorAll('.inbox-row').forEach(r => r.classList.toggle('active', r.getAttribute('data-id') === emailId));
@@ -584,6 +607,7 @@ async function loadEmailDetail(emailId) {
         var hasSummary = e.aiSummary && e.aiSummary !== 'Pending' && e.aiSummary !== 'AI unavailable' && e.aiSummary !== 'AI processing failed';
         var hasReply = e.aiSuggestedReply && e.aiSuggestedReply.length > 0;
         var hasAi = hasSummary || hasReply;
+        var cleanBody = cleanEmailBody(e.body);
 
         var html = '<div class="detail-fadein">';
 
@@ -613,38 +637,77 @@ async function loadEmailDetail(emailId) {
             '<div class="ai-intel-value">' +
                 (hasSummary ? escapeHtml(e.aiSummary) : '<span class="ai-intel-empty">AI analysis pending...</span>') +
             '</div>' +
-        '</div>';
+        '</div></div>';
 
-        // Suggested Reply
-        html += '<div class="ai-intel-row">' +
-            '<div class="ai-intel-label">Suggested Reply</div>' +
-            '<div class="ai-intel-value ai-reply-block">';
+        // Reply editor
+        html += '<div class="reply-editor-card">' +
+            '<div class="reply-editor-header">' +
+                '<span class="reply-editor-title">Reply</span>' +
+                '<span class="reply-editor-to">To: ' + escapeHtml(e.fromEmail) + '</span>' +
+            '</div>';
 
         if (hasReply) {
-            html += '<div class="ai-reply-text">' + escapeHtml(e.aiSuggestedReply) + '</div>' +
-                '<button class="btn-copy-reply" onclick="copyReply(this)"><span class="copy-icon">&#x2398;</span> Copy reply</button>';
+            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="6">' + escapeHtml(e.aiSuggestedReply) + '</textarea>';
         } else if (hasSummary) {
-            // AI ran but intentionally suppressed the reply
-            html += '<span class="ai-no-reply">No reply suggested for this email</span>';
+            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="4" placeholder="No AI suggestion — write your reply here..."></textarea>';
         } else {
-            html += '<span class="ai-intel-empty">AI analysis pending...</span>';
+            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="4" placeholder="AI analysis pending... You can still write manually."></textarea>';
         }
 
-        html += '</div></div></div>';
+        html += '<div class="reply-editor-actions">' +
+            '<div class="reply-actions-left">' +
+                '<button class="btn-reply-send" onclick="sendReply(\'' + e.id + '\')">Send</button>' +
+                '<button class="btn-reply-draft" onclick="saveDraft(\'' + e.id + '\')">Save Draft</button>' +
+            '</div>' +
+            '<button class="btn-copy-reply" onclick="copyEditorText()"><span class="copy-icon">&#x2398;</span> Copy</button>' +
+        '</div></div>';
 
-        // Original email
+        // Original email body
         html += '<div class="inbox-detail-section">' +
             '<div class="inbox-detail-section-title">Original Email</div>' +
-            '<div class="inbox-detail-body">' + escapeHtml(e.body) + '</div>' +
+            '<div class="inbox-detail-body email-body-clean">' + escapeHtml(cleanBody) + '</div>' +
         '</div>';
 
         html += '</div>';
-
         inboxDetail.innerHTML = html;
     } catch (err) {
         inboxDetail.innerHTML = '<div class="detail-empty-state"><div class="detail-empty-text">Failed to load email</div></div>';
         showStatus('Error: ' + err.message, 'error');
     }
+}
+
+async function saveDraft(emailId) {
+    var editor = document.getElementById('replyEditor');
+    if (!editor) return;
+    try {
+        await apiCallJson('/api/emails/' + emailId + '/reply', 'POST', { body: editor.value, action: 'draft' });
+        showStatus('Draft saved', 'success');
+    } catch (err) {
+        showStatus('Save failed: ' + err.message, 'error');
+    }
+}
+
+async function sendReply(emailId) {
+    var editor = document.getElementById('replyEditor');
+    if (!editor || !editor.value.trim()) { showStatus('Write a reply first', 'error'); return; }
+    var btn = document.querySelector('.btn-reply-send');
+    if (btn) { btn.textContent = 'Sending...'; btn.disabled = true; }
+    try {
+        var result = await apiCallJson('/api/emails/' + emailId + '/reply', 'POST', { body: editor.value, action: 'send' });
+        showStatus(result.message || 'Reply sent', 'success');
+    } catch (err) {
+        showStatus('Send failed: ' + err.message, 'error');
+    } finally {
+        if (btn) { btn.textContent = 'Send'; btn.disabled = false; }
+    }
+}
+
+function copyEditorText() {
+    var editor = document.getElementById('replyEditor');
+    if (!editor) return;
+    navigator.clipboard.writeText(editor.value).then(function() {
+        showStatus('Reply copied', 'success');
+    });
 }
 
 // ---- AI Reprocessing ----
@@ -661,7 +724,10 @@ async function reprocessAi() {
     try {
         var result = await apiCall('/api/emails/backfill-ai?organizationId=' + orgId + '&force=true&limit=50', 'POST');
         showStatus('AI reprocessed: ' + result.updated + ' updated, ' + result.failed + ' failed', 'success');
-        if (currentView === 'inbox') await loadInbox();
+        if (currentView === 'inbox') {
+            await loadInbox();
+            if (currentEmailId) await loadEmailDetail(currentEmailId);
+        }
     } catch (err) {
         showStatus('Reprocess failed: ' + err.message, 'error');
     } finally {
