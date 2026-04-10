@@ -182,15 +182,16 @@ public class EmailsController : ControllerBase
             }
         }
 
+        // Compute BEFORE changing ProjectId — otherwise comparison always fails
         var wasUnassigned = !email.ProjectId.HasValue;
+        var isNewAssignment = wasUnassigned || (email.ProjectId.HasValue && email.ProjectId.Value != request.ProjectId);
 
         email.ProjectId = request.ProjectId;
         email.AssignmentSource = "manual";
         email.AssignmentConfidence = 1.0m;
         await _emailRepo.UpdateAsync(email, ct);
 
-        // Only increment if this is a new assignment or reassignment to a different project
-        if (wasUnassigned || email.ProjectId != request.ProjectId)
+        if (isNewAssignment)
         {
             project.EmailCount++;
         }

@@ -106,7 +106,7 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.OrganizationId);
             e.HasIndex(x => new { x.OrganizationId, x.ProjectId });
             e.HasIndex(x => new { x.OrganizationId, x.ProviderMessageId }).IsUnique()
-                .HasFilter(null);
+                .HasFilter("\"ProviderMessageId\" IS NOT NULL");
 
             e.HasOne(x => x.Project)
                 .WithMany(p => p.EmailMessages)

@@ -163,6 +163,8 @@ try
     app.UseDefaultFiles();
     app.UseStaticFiles();
 
+    app.UseMiddleware<ApiKeyMiddleware>();
+
     app.UseAuthentication();
     app.UseAuthorization();
 
@@ -182,7 +184,7 @@ try
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Check if critical tables actually exist despite migration history
+        // Check if critical tables exist
         var tablesExist = false;
         try
         {
@@ -191,18 +193,17 @@ try
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'Projects')";
             var result = await cmd.ExecuteScalarAsync();
-            tablesExist = result is true or (bool)true;
-            if (result is bool b) tablesExist = b;
+            tablesExist = result is true || (result is bool b && b);
         }
-        catch { /* connection issue — will handle below */ }
+        catch (Exception connEx)
+        {
+            Log.Error(connEx, "Failed to check database tables — connection issue");
+        }
 
         if (!tablesExist)
         {
-            Log.Warning("Critical tables missing — database reset triggered");
-            db.Database.EnsureDeleted();
-            Log.Information("Old database state cleared");
-            db.Database.EnsureCreated();
-            Log.Information("Database created from scratch — all tables ready");
+            Log.Error("Critical tables missing — manual intervention required. Run EF migrations or create schema manually.");
+            throw new InvalidOperationException("Database schema missing. Refusing to start without required tables.");
         }
         else
         {
@@ -266,7 +267,17 @@ try
                     Log.Information("UserToneProfiles table created");
                 }
 
-                Log.Information("Schema update check complete — AI columns ensured");
+                // Fix unique index to exclude NULLs
+                using var fixIdxCmd = conn.CreateCommand();
+                fixIdxCmd.CommandText = """
+                    DROP INDEX IF EXISTS "IX_EmailMessages_OrganizationId_ProviderMessageId";
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_EmailMessages_OrganizationId_ProviderMessageId"
+                    ON "EmailMessages" ("OrganizationId", "ProviderMessageId")
+                    WHERE "ProviderMessageId" IS NOT NULL
+                    """;
+                await fixIdxCmd.ExecuteNonQueryAsync();
+
+                Log.Information("Schema update check complete — AI columns + indexes ensured");
             }
             catch (Exception schemaEx)
             {

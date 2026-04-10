@@ -748,10 +748,8 @@ async function loadEmailDetail(emailId) {
             '<button class="btn-copy-reply" onclick="copyEditorText()"><span class="copy-icon">&#x2398;</span> Copy</button>' +
         '</div></div>';
 
-        // Original email body — collapsible clean rendering
-        var bodyContent = cleaned.hasHtml
-            ? '<div class="email-body-clean email-html-body">' + cleaned.main + '</div>'
-            : '<div class="email-body-clean">' + escapeHtml(cleaned.main || '(empty email)') + '</div>';
+        // Original email body — always escaped for XSS safety
+        var bodyContent = '<div class="email-body-clean">' + escapeHtml(cleaned.main || '(empty email)') + '</div>';
 
         html += '<div class="email-body-section">' +
             '<button class="email-body-toggle" onclick="toggleEmailBody(this)">Show original email</button>' +
