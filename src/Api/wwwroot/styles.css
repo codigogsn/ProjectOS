@@ -1255,11 +1255,62 @@ body {
     border: 1px solid var(--border);
 }
 
-.email-body-clean img {
+.email-body-clean img, .email-inline-img {
     max-width: 100%;
     height: auto;
     border-radius: 6px;
     margin: 8px 0;
+    display: block;
+}
+
+/* HTML email body */
+.email-html-body {
+    white-space: normal;
+}
+
+.email-html-body p { margin: 0 0 10px; }
+.email-html-body br + br { display: none; }
+.email-html-body table { border-collapse: collapse; width: 100%; }
+.email-html-body td, .email-html-body th { padding: 4px 8px; border: 1px solid var(--border); }
+.email-html-body blockquote { border-left: 2px solid #334155; padding-left: 12px; margin: 8px 0; color: #6b7a8d; }
+
+/* Inline links in email */
+.email-inline-link {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.15s;
+}
+
+.email-inline-link:hover {
+    border-bottom-color: var(--accent);
+}
+
+/* Button feedback states */
+.btn-reply-send.send-success {
+    background: #064e3b;
+    border-color: #34d399;
+}
+
+.btn-reply-draft.draft-saved {
+    border-color: #34d399;
+    color: #34d399;
+}
+
+/* No-reply expand */
+.btn-expand-editor {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    margin-left: 8px;
+}
+
+.no-reply-editor-wrap {
+    border-top: 1px solid var(--border);
 }
 
 /* Collapsible email sections */
