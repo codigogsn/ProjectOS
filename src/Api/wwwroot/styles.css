@@ -853,7 +853,7 @@ body {
     border: 1px solid #1e3a5f;
     border-radius: 8px;
     padding: 20px;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .ai-intel-header {
@@ -1059,27 +1059,26 @@ body {
 .reply-editor-card {
     background: var(--surface);
     border: 1px solid #1e3a5f;
-    border-radius: 8px;
-    margin-bottom: 24px;
+    border-radius: 10px;
+    margin-bottom: 28px;
     overflow: hidden;
-    box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(74, 158, 255, 0.08);
 }
 
 .reply-editor-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 16px;
+    padding: 12px 18px;
     border-bottom: 1px solid var(--border);
-    background: var(--surface2);
+    background: linear-gradient(180deg, var(--surface2) 0%, var(--surface) 100%);
 }
 
 .reply-editor-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--text-dim);
+    letter-spacing: 0.3px;
+    color: var(--text);
 }
 
 .reply-editor-to {
@@ -1090,32 +1089,51 @@ body {
 /* Variant chips */
 .variant-chips {
     display: flex;
-    gap: 6px;
-    padding: 10px 16px;
+    gap: 8px;
+    padding: 12px 18px;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
+    align-items: center;
 }
 
 .variant-chip {
-    background: transparent;
+    background: var(--bg);
     border: 1px solid var(--border);
     color: var(--text-dim);
-    padding: 4px 14px;
-    border-radius: 14px;
+    padding: 6px 16px;
+    border-radius: 6px;
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.18s ease;
+    position: relative;
 }
 
 .variant-chip:hover {
-    border-color: var(--text-dim);
+    border-color: #475569;
     color: var(--text);
+    background: var(--surface2);
 }
 
 .variant-chip.active {
-    background: var(--accent);
+    background: #0f172a;
     border-color: var(--accent);
-    color: #fff;
+    color: var(--text);
+    box-shadow: 0 0 0 1px rgba(74, 158, 255, 0.15);
+}
+
+.variant-recommended.active {
+    background: linear-gradient(135deg, #0f172a, #172554);
+}
+
+.variant-suggested {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin-left: 6px;
+    opacity: 0.8;
 }
 
 /* Intent badges */
@@ -1123,7 +1141,7 @@ body {
     font-size: 10px;
     font-weight: 500;
     padding: 2px 8px;
-    border-radius: 8px;
+    border-radius: 6px;
     margin-left: 8px;
     vertical-align: middle;
 }
@@ -1134,47 +1152,56 @@ body {
 }
 
 .intent-optional {
-    background: #422006;
+    background: rgba(251, 191, 36, 0.1);
     color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.15);
 }
 
 .reply-not-needed {
-    padding: 10px 16px;
-    font-size: 12px;
-    color: #64748b;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: #475569;
     font-style: italic;
     border-bottom: 1px solid var(--border);
+    background: var(--bg);
+}
+
+/* Reply editor textarea */
+.reply-editor-wrap {
+    position: relative;
 }
 
 .reply-editor-textarea {
     width: 100%;
-    background: #0a0e17;
+    background: #080c15;
     border: none;
-    color: var(--text);
-    padding: 16px 18px;
+    color: #d4dce8;
+    padding: 18px 20px;
     font-size: 14px;
     font-family: inherit;
-    line-height: 1.7;
+    line-height: 1.75;
     resize: vertical;
-    min-height: 120px;
+    min-height: 140px;
+    transition: opacity 0.12s ease;
 }
 
 .reply-editor-textarea:focus {
     outline: none;
-    background: #080c14;
+    background: #060a12;
+    color: var(--text);
 }
 
 .reply-editor-textarea::placeholder {
-    color: #3b4a5e;
+    color: #2d3a4e;
 }
 
 .reply-editor-actions {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 16px;
+    padding: 12px 18px;
     border-top: 1px solid var(--border);
-    background: var(--surface2);
+    background: linear-gradient(0deg, var(--surface2) 0%, var(--surface) 100%);
 }
 
 .reply-actions-left {
@@ -1237,7 +1264,15 @@ body {
 
 /* Collapsible email sections */
 .email-body-section {
-    margin-top: 20px;
+    margin-top: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    opacity: 0.75;
+    transition: opacity 0.2s;
+}
+
+.email-body-section:hover {
+    opacity: 1;
 }
 
 .email-body-toggle, .email-fwd-toggle, .email-links-toggle {

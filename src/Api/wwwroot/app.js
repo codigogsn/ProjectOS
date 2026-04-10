@@ -694,12 +694,12 @@ async function loadEmailDetail(emailId) {
 
         if (variants && (variants.concise || variants.balanced || variants.warmer)) {
             html += '<div class="variant-chips">' +
-                '<button class="variant-chip active" data-variant="balanced" onclick="selectVariant(this, \'balanced\')">Balanced</button>' +
+                '<button class="variant-chip variant-recommended active" data-variant="balanced" onclick="selectVariant(this, \'balanced\')">Balanced <span class="variant-suggested">Suggested</span></button>' +
                 '<button class="variant-chip" data-variant="concise" onclick="selectVariant(this, \'concise\')">Concise</button>' +
                 '<button class="variant-chip" data-variant="warmer" onclick="selectVariant(this, \'warmer\')">Warmer</button>' +
                 '<span id="variantData" style="display:none">' + escapeHtml(JSON.stringify(variants)) + '</span>' +
             '</div>';
-            html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="6">' + escapeHtml(variants.balanced || e.aiSuggestedReply || '') + '</textarea>';
+            html += '<div class="reply-editor-wrap"><textarea class="reply-editor-textarea" id="replyEditor" rows="7">' + escapeHtml(variants.balanced || e.aiSuggestedReply || '') + '</textarea></div>';
         } else if (hasReply) {
             html += '<textarea class="reply-editor-textarea" id="replyEditor" rows="6">' + escapeHtml(e.aiSuggestedReply) + '</textarea>';
         } else if (hasSummary && replyIntent === 'no_reply') {
@@ -786,7 +786,13 @@ function selectVariant(btn, type) {
     try {
         var v = JSON.parse(dataEl.textContent);
         var editor = document.getElementById('replyEditor');
-        if (editor) editor.value = v[type] || '';
+        if (!editor) return;
+        // Smooth fade transition
+        editor.style.opacity = '0';
+        setTimeout(function() {
+            editor.value = v[type] || '';
+            editor.style.opacity = '1';
+        }, 120);
     } catch(ex) {}
 }
 
