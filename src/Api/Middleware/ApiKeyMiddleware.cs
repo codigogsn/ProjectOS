@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace ProjectOS.Api.Middleware;
 
 public class ApiKeyMiddleware
@@ -38,11 +41,16 @@ public class ApiKeyMiddleware
             return;
         }
 
-        var providedKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
+        var providedKey = context.Request.Headers["X-Api-Key"].FirstOrDefault() ?? "";
 
-        if (string.IsNullOrEmpty(providedKey) || providedKey != expectedKey)
+        // Constant-time comparison to prevent timing attacks
+        var expected = Encoding.UTF8.GetBytes(expectedKey);
+        var provided = Encoding.UTF8.GetBytes(providedKey);
+        var isValid = provided.Length > 0 && CryptographicOperations.FixedTimeEquals(expected, provided);
+
+        if (!isValid)
         {
-            _logger.LogWarning("Unauthorized API request to {Path} from {IP}",
+            _logger.LogWarning("[auth_rejected] path={Path} ip={IP}",
                 path, context.Connection.RemoteIpAddress);
             context.Response.StatusCode = 401;
             context.Response.ContentType = "application/json";

@@ -22,6 +22,19 @@ public class ToneProfileController : ControllerBase
         _logger = logger;
     }
 
+    private IActionResult? ValidateOrg(Guid organizationId)
+    {
+        var allowed = _config["DefaultOrganizationId"];
+        if (string.IsNullOrEmpty(allowed))
+            return BadRequest(new { error = "Organization not configured. Set DefaultOrganizationId." });
+        if (!organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("[org_mismatch] endpoint=tone-profile allowed={AllowedOrg}", allowed);
+            return Forbid();
+        }
+        return null;
+    }
+
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] Guid? organizationId, CancellationToken ct)
     {
@@ -29,12 +42,14 @@ public class ToneProfileController : ControllerBase
         if (orgId == Guid.Empty)
             return BadRequest(new { error = "organizationId required" });
 
+        var guard = ValidateOrg(orgId);
+        if (guard is not null) return guard;
+
         var profile = await _db.UserToneProfiles
             .FirstOrDefaultAsync(p => p.OrganizationId == orgId, ct);
 
         if (profile is null)
         {
-            // Return default — don't persist yet
             return Ok(new
             {
                 id = (Guid?)null,
@@ -63,6 +78,9 @@ public class ToneProfileController : ControllerBase
         if (orgId == Guid.Empty)
             return BadRequest(new { error = "organizationId required" });
 
+        var guard = ValidateOrg(orgId);
+        if (guard is not null) return guard;
+
         var profile = await _db.UserToneProfiles
             .FirstOrDefaultAsync(p => p.OrganizationId == orgId, ct);
 
@@ -84,7 +102,7 @@ public class ToneProfileController : ControllerBase
         profile.Example2 = req.Example2;
 
         await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Tone profile saved for org {OrgId}", orgId);
+        _logger.LogInformation("[tone_profile_saved] org={OrgId}", orgId);
 
         return Ok(MapToResponse(profile));
     }

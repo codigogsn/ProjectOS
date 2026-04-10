@@ -181,9 +181,25 @@ public class ProjectsController : ControllerBase
         });
     }
 
+    private IActionResult? ValidateProjectOrg(Project? project)
+    {
+        if (project is null) return NotFound();
+        var allowedOrg = GetAllowedOrgId();
+        if (allowedOrg != Guid.Empty && project.OrganizationId != allowedOrg)
+        {
+            _logger.LogWarning("[org_mismatch] endpoint=project allowed={AllowedOrg}", allowedOrg);
+            return NotFound();
+        }
+        return null;
+    }
+
     [HttpPost("{projectId:guid}/summary")]
     public async Task<IActionResult> GenerateSummary(Guid projectId, CancellationToken ct)
     {
+        var project = await _projectRepo.GetByIdAsync(projectId, ct);
+        var orgCheck = ValidateProjectOrg(project);
+        if (orgCheck is not null) return orgCheck;
+
         _logger.LogInformation("Generating AI summary for project {ProjectId}", projectId);
 
         var summary = await _summaryService.GenerateSummaryAsync(projectId, ct);
@@ -202,6 +218,10 @@ public class ProjectsController : ControllerBase
     [HttpGet("{projectId:guid}/summary")]
     public async Task<IActionResult> GetSummary(Guid projectId, CancellationToken ct)
     {
+        var project = await _projectRepo.GetByIdAsync(projectId, ct);
+        var orgCheck = ValidateProjectOrg(project);
+        if (orgCheck is not null) return orgCheck;
+
         var summary = await _summaryService.GetLatestSummaryAsync(projectId, ct);
         if (summary is null)
             return NotFound(new { message = "No summary generated yet" });
@@ -221,10 +241,10 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> GetActionItems(Guid projectId, CancellationToken ct)
     {
         var project = await _projectRepo.GetByIdAsync(projectId, ct);
-        if (project is null)
-            return NotFound();
+        var orgCheck = ValidateProjectOrg(project);
+        if (orgCheck is not null) return orgCheck;
 
-        var items = project.ActionItems
+        var items = project!.ActionItems
             .OrderBy(a => a.Status == "Pending" ? 0 : a.Status == "Done" ? 1 : 2)
             .ThenBy(a => a.Priority)
             .Select(a => new ActionItemDto
@@ -243,15 +263,15 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> MarkDone(Guid projectId, Guid actionItemId, CancellationToken ct)
     {
         var project = await _projectRepo.GetByIdAsync(projectId, ct);
-        if (project is null)
-            return NotFound();
+        var orgCheck = ValidateProjectOrg(project);
+        if (orgCheck is not null) return orgCheck;
 
-        var item = project.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
+        var item = project!.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
         if (item is null)
             return NotFound();
 
         item.Status = "Done";
-        await _projectRepo.UpdateAsync(project, ct);
+        await _projectRepo.UpdateAsync(project!, ct);
 
         _logger.LogInformation("Action item {ActionItemId} marked done", actionItemId);
         return Ok(new { message = "Marked as done" });
@@ -261,15 +281,15 @@ public class ProjectsController : ControllerBase
     public async Task<IActionResult> Dismiss(Guid projectId, Guid actionItemId, CancellationToken ct)
     {
         var project = await _projectRepo.GetByIdAsync(projectId, ct);
-        if (project is null)
-            return NotFound();
+        var orgCheck = ValidateProjectOrg(project);
+        if (orgCheck is not null) return orgCheck;
 
-        var item = project.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
+        var item = project!.ActionItems.FirstOrDefault(a => a.Id == actionItemId);
         if (item is null)
             return NotFound();
 
         item.Status = "Dismissed";
-        await _projectRepo.UpdateAsync(project, ct);
+        await _projectRepo.UpdateAsync(project!, ct);
 
         _logger.LogInformation("Action item {ActionItemId} dismissed", actionItemId);
         return Ok(new { message = "Dismissed" });
@@ -278,6 +298,10 @@ public class ProjectsController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
+        var project = await _projectRepo.GetByIdAsync(id, ct);
+        var orgCheck = ValidateProjectOrg(project);
+        if (orgCheck is not null) return orgCheck;
+
         await _projectRepo.DeleteAsync(id, ct);
         return NoContent();
     }
