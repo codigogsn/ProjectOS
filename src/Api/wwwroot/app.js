@@ -92,9 +92,33 @@ function statusClass(status) {
     return (status || 'draft').toLowerCase().replace(/\s/g, '');
 }
 
+function getApiKey() {
+    return localStorage.getItem('projectos_api_key') || '';
+}
+
+function saveApiKey() {
+    var input = document.getElementById('apiKeyInput');
+    if (!input) return;
+    localStorage.setItem('projectos_api_key', input.value.trim());
+    input.type = 'password';
+    showStatus('API key saved', 'success');
+}
+
+function handle401(res) {
+    if (res.status === 401) {
+        showStatus('Unauthorized — check API key', 'error');
+        var keyInput = document.getElementById('apiKeyInput');
+        if (keyInput) { keyInput.style.borderColor = '#f87171'; keyInput.focus(); }
+    }
+}
+
 async function apiCall(url, method) {
-    const res = await fetch(url, { method: method || 'GET' });
+    var headers = {};
+    var key = getApiKey();
+    if (key) headers['X-Api-Key'] = key;
+    const res = await fetch(url, { method: method || 'GET', headers: headers });
     if (!res.ok) {
+        handle401(res);
         const text = await res.text();
         throw new Error(text || res.statusText);
     }
@@ -102,12 +126,16 @@ async function apiCall(url, method) {
 }
 
 async function apiCallJson(url, method, body) {
+    var headers = { 'Content-Type': 'application/json' };
+    var key = getApiKey();
+    if (key) headers['X-Api-Key'] = key;
     const res = await fetch(url, {
         method: method || 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify(body)
     });
     if (!res.ok) {
+        handle401(res);
         const text = await res.text();
         throw new Error(text || res.statusText);
     }
@@ -1072,3 +1100,12 @@ function escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// Initialize API key from localStorage
+(function() {
+    var saved = localStorage.getItem('projectos_api_key');
+    if (saved) {
+        var input = document.getElementById('apiKeyInput');
+        if (input) input.value = saved;
+    }
+})();

@@ -152,6 +152,20 @@ try
 
     var app = builder.Build();
 
+    // Check API key configuration
+    var apiAccessKey = Environment.GetEnvironmentVariable("API_ACCESS_KEY");
+    if (string.IsNullOrEmpty(apiAccessKey))
+    {
+        if (!app.Environment.IsDevelopment())
+            Log.Error("API_ACCESS_KEY env var is NOT set — all API endpoints are UNPROTECTED in production!");
+        else
+            Log.Warning("API_ACCESS_KEY not set — API endpoints are unprotected (dev mode)");
+    }
+    else
+    {
+        Log.Information("API_ACCESS_KEY configured — API endpoints are protected");
+    }
+
     // Middleware pipeline
     app.UseMiddleware<GlobalExceptionMiddleware>();
     app.UseMiddleware<RequestLoggingMiddleware>();

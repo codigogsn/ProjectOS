@@ -17,6 +17,8 @@
             </nav>
         </div>
         <div class="topbar-controls">
+            <input type="password" id="apiKeyInput" placeholder="API Key" class="input-apikey" />
+            <button onclick="saveApiKey()" class="btn-savekey">Key</button>
             <input type="text" id="orgId" placeholder="Organization ID" />
             <button onclick="syncEmails()">Sync Emails</button>
             <button onclick="groupProjects()">Group Projects</button>

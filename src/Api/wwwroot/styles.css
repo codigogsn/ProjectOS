@@ -122,6 +122,24 @@ body {
     cursor: not-allowed;
 }
 
+.input-apikey {
+    width: 120px !important;
+    font-size: 12px !important;
+    letter-spacing: 1px;
+}
+
+.btn-savekey {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+    color: var(--text-dim) !important;
+    border-color: var(--border) !important;
+}
+
+.btn-savekey:hover {
+    color: var(--success) !important;
+    border-color: var(--success) !important;
+}
+
 .btn-reprocess {
     border-color: #92400e !important;
     color: #fbbf24 !important;
