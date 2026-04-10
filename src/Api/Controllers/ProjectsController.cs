@@ -38,9 +38,16 @@ public class ProjectsController : ControllerBase
     private IActionResult? ValidateOrg(Guid organizationId)
     {
         var allowed = _config["DefaultOrganizationId"];
-        if (!string.IsNullOrEmpty(allowed) && !organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(allowed))
+            return BadRequest(new { error = "Organization not configured. Set DefaultOrganizationId." });
+        if (!organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
             return Forbid();
         return null;
+    }
+
+    private Guid GetAllowedOrgId()
+    {
+        return Guid.TryParse(_config["DefaultOrganizationId"], out var id) ? id : Guid.Empty;
     }
 
     [HttpGet]
@@ -71,6 +78,10 @@ public class ProjectsController : ControllerBase
     {
         var project = await _projectRepo.GetByIdAsync(id, ct);
         if (project is null)
+            return NotFound();
+
+        var allowedOrg = GetAllowedOrgId();
+        if (allowedOrg != Guid.Empty && project.OrganizationId != allowedOrg)
             return NotFound();
 
         var emails = await _emailRepo.GetRecentByProjectIdAsync(id, 50, ct);

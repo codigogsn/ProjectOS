@@ -207,9 +207,20 @@ public partial class EmailIngestionService : IEmailIngestionService
             OrganizationId = organizationId
         };
 
-        await _contactRepo.AddAsync(contact, ct);
-        _logger.LogInformation("Created new contact for {Email}", email);
-        return contact;
+        try
+        {
+            await _contactRepo.AddAsync(contact, ct);
+            _logger.LogInformation("Created new contact for {Email}", email);
+            return contact;
+        }
+        catch (DbUpdateException)
+        {
+            // Unique constraint hit — another request created this contact concurrently
+            var existing = await _contactRepo.GetByEmailAsync(email, organizationId, ct);
+            if (existing is not null)
+                return existing;
+            throw; // Re-throw if still not found (unexpected)
+        }
     }
 
     private static string ExtractNameFromEmail(string email)

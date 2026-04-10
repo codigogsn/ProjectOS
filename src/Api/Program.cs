@@ -157,7 +157,7 @@ try
     if (string.IsNullOrEmpty(apiAccessKey))
     {
         if (!app.Environment.IsDevelopment())
-            Log.Error("API_ACCESS_KEY env var is NOT set — all API endpoints are UNPROTECTED in production!");
+            throw new InvalidOperationException("API_ACCESS_KEY must be set in production. Refusing to start unprotected.");
         else
             Log.Warning("API_ACCESS_KEY not set — API endpoints are unprotected (dev mode)");
     }
@@ -290,6 +290,15 @@ try
                     WHERE "ProviderMessageId" IS NOT NULL
                     """;
                 await fixIdxCmd.ExecuteNonQueryAsync();
+
+                // Unique index on Contact (OrganizationId, Email) to prevent duplicates
+                using var contactIdxCmd = conn.CreateCommand();
+                contactIdxCmd.CommandText = """
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_Contacts_OrganizationId_Email_Unique"
+                    ON "Contacts" ("OrganizationId", "Email")
+                    WHERE "Email" IS NOT NULL
+                    """;
+                await contactIdxCmd.ExecuteNonQueryAsync();
 
                 Log.Information("Schema update check complete — AI columns + indexes ensured");
             }

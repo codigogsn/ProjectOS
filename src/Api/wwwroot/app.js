@@ -770,7 +770,7 @@ async function loadEmailDetail(emailId) {
 
         html += '<div class="reply-editor-actions">' +
             '<div class="reply-actions-left">' +
-                '<button class="btn-reply-send" onclick="sendReply(\'' + e.id + '\')">Send</button>' +
+                '<button class="btn-reply-send" onclick="sendReply(\'' + e.id + '\')">Save Reply</button>' +
                 '<button class="btn-reply-draft" onclick="saveDraft(\'' + e.id + '\')">Save Draft</button>' +
             '</div>' +
             '<button class="btn-copy-reply" onclick="copyEditorText()"><span class="copy-icon">&#x2398;</span> Copy</button>' +
@@ -835,13 +835,13 @@ async function sendReply(emailId) {
     if (btn) { btn.textContent = 'Sending...'; btn.disabled = true; }
     try {
         var result = await apiCallJson('/api/emails/' + emailId + '/reply', 'POST', { body: editor.value, action: 'send' });
-        if (btn) { btn.textContent = 'Sent'; btn.classList.add('send-success'); }
-        showStatus(result.message || 'Reply staged', 'success');
-        setTimeout(function() { if (btn) { btn.textContent = 'Send'; btn.disabled = false; btn.classList.remove('send-success'); } }, 3000);
+        if (btn) { btn.textContent = 'Saved'; }
+        showStatus('Reply saved (sending not yet available)', 'success');
+        setTimeout(function() { if (btn) { btn.textContent = 'Save Reply'; btn.disabled = false; } }, 2000);
         silentRefreshInbox();
     } catch (err) {
-        showStatus('Send failed: ' + err.message, 'error');
-        if (btn) { btn.textContent = 'Send'; btn.disabled = false; }
+        showStatus('Save failed: ' + err.message, 'error');
+        if (btn) { btn.textContent = 'Save Reply'; btn.disabled = false; }
     }
 }
 

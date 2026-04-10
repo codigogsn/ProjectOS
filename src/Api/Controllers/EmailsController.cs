@@ -15,6 +15,8 @@ namespace ProjectOS.Api.Controllers;
 [AllowAnonymous] // MVP: no login UI yet — will add [Authorize] when auth is implemented
 public class EmailsController : ControllerBase
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, DateTime> _backfillCooldown = new();
+
     private readonly IEmailIngestionService _ingestionService;
     private readonly IEmailMessageRepository _emailRepo;
     private readonly IProjectRepository _projectRepo;
@@ -44,9 +46,16 @@ public class EmailsController : ControllerBase
     private IActionResult? ValidateOrg(Guid organizationId)
     {
         var allowed = _config["DefaultOrganizationId"];
-        if (!string.IsNullOrEmpty(allowed) && !organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(allowed))
+            return BadRequest(new { error = "Organization not configured. Set DefaultOrganizationId." });
+        if (!organizationId.ToString().Equals(allowed, StringComparison.OrdinalIgnoreCase))
             return Forbid();
         return null;
+    }
+
+    private Guid GetAllowedOrgId()
+    {
+        return Guid.TryParse(_config["DefaultOrganizationId"], out var id) ? id : Guid.Empty;
     }
 
     [HttpPost("sync")]
@@ -106,6 +115,10 @@ public class EmailsController : ControllerBase
     {
         var email = await _emailRepo.GetByIdAsync(id, ct);
         if (email is null)
+            return NotFound(new { error = "Email not found" });
+
+        var allowedOrg = GetAllowedOrgId();
+        if (allowedOrg != Guid.Empty && email.OrganizationId != allowedOrg)
             return NotFound(new { error = "Email not found" });
 
         _logger.LogInformation("Returning email detail {EmailId}", id);
@@ -309,6 +322,14 @@ public class EmailsController : ControllerBase
 
         var guard = ValidateOrg(organizationId);
         if (guard is not null) return guard;
+
+        // Rate limit: 1 backfill per org per 60 seconds
+        if (_backfillCooldown.TryGetValue(organizationId, out var lastCall) && DateTime.UtcNow - lastCall < TimeSpan.FromSeconds(60))
+        {
+            var wait = 60 - (int)(DateTime.UtcNow - lastCall).TotalSeconds;
+            return StatusCode(429, new { error = "Too many requests. Try again in " + wait + " seconds." });
+        }
+        _backfillCooldown[organizationId] = DateTime.UtcNow;
 
         var isSingle = emailId.HasValue && emailId.Value != Guid.Empty;
         var mode = force ? "force" : "only-null";

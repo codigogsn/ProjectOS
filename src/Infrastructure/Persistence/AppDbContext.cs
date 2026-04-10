@@ -76,7 +76,8 @@ public class AppDbContext : DbContext
             e.Property(x => x.Company).HasMaxLength(200);
             e.Property(x => x.Notes).HasMaxLength(2000);
 
-            e.HasIndex(x => new { x.OrganizationId, x.Email });
+            e.HasIndex(x => new { x.OrganizationId, x.Email }).IsUnique()
+                .HasFilter("\"Email\" IS NOT NULL");
 
             e.HasOne(x => x.Organization)
                 .WithMany(o => o.Contacts)
