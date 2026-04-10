@@ -16,6 +16,7 @@ public class RequestLoggingMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var correlationId = Guid.NewGuid().ToString("N")[..12];
+        context.Items["CorrelationId"] = correlationId;
         context.Response.Headers["X-Correlation-Id"] = correlationId;
 
         var sw = Stopwatch.StartNew();
@@ -26,12 +27,12 @@ public class RequestLoggingMiddleware
             sw.Stop();
 
             _logger.LogInformation(
-                "{Method} {Path} from {IP} => {StatusCode} in {Elapsed}ms",
+                "[http_request] method={Method} path={Path} status={StatusCode} elapsed={Elapsed}ms corr={CorrelationId}",
                 context.Request.Method,
                 context.Request.Path,
-                context.Connection.RemoteIpAddress,
                 context.Response.StatusCode,
-                sw.ElapsedMilliseconds);
+                sw.ElapsedMilliseconds,
+                correlationId);
         }
     }
 }

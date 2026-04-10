@@ -212,7 +212,7 @@ public class EmailsController : ControllerBase
             project.LastActivityAtUtc = email.SentAtUtc;
         await _projectRepo.UpdateAsync(project, ct);
 
-        _logger.LogInformation("Email {EmailId} manually assigned to project {ProjectId}", emailId, request.ProjectId);
+        _logger.LogInformation("[email_assigned_to_project] email={EmailId} project={ProjectId}", emailId, request.ProjectId);
 
         return Ok(new { message = "Email assigned", projectId = request.ProjectId });
     }
@@ -259,7 +259,7 @@ public class EmailsController : ControllerBase
         email.AssignmentConfidence = 1.0m;
         await _emailRepo.UpdateAsync(email, ct);
 
-        _logger.LogInformation("Created project {ProjectId} from email {EmailId}", project.Id, emailId);
+        _logger.LogInformation("[project_created_from_email] project={ProjectId} email={EmailId} org={OrgId}", project.Id, emailId, email.OrganizationId);
 
         return Ok(new { message = "Project created", projectId = project.Id, projectName = project.Name });
     }

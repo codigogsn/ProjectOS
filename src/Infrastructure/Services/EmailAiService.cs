@@ -27,7 +27,7 @@ public class EmailAiService
 
     public async Task ProcessEmailAsync(EmailMessage email, CancellationToken ct = default)
     {
-        _logger.LogInformation("EmailAiService called for subject: {Subject}", email.Subject);
+        _logger.LogInformation("[ai_process_start] org={OrgId} email={EmailId}", email.OrganizationId, email.Id);
 
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? _options.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -81,7 +81,7 @@ public class EmailAiService
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning("AI call timed out for email {EmailId}", email.Id);
+            _logger.LogWarning("[ai_summary_timeout] org={OrgId} email={EmailId}", email.OrganizationId, email.Id);
             email.AiSummary = "AI timeout";
             email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
@@ -93,7 +93,7 @@ public class EmailAiService
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("AI email processing failed: {Status}", response.StatusCode);
+            _logger.LogError("[ai_summary_error] org={OrgId} email={EmailId} status={Status}", email.OrganizationId, email.Id, (int)response.StatusCode);
             email.AiSummary = "AI processing failed";
             email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
@@ -154,12 +154,13 @@ public class EmailAiService
                 _logger.LogInformation("Reply suppressed: cat={Cat}, intent={Intent}", cat, intent);
             }
 
-            _logger.LogInformation("AI done {EmailId}: cat={Cat}, pri={Pri}, intent={Intent}, hasVariants={V}",
+            _logger.LogInformation("[ai_summary_success] org={OrgId} email={EmailId} cat={Cat} pri={Pri} intent={Intent} variants={V}",
+                email.OrganizationId,
                 email.Id, email.AiCategory, email.AiPriority, email.AiReplyIntent, email.AiReplyVariants != null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse AI response for email {EmailId}", email.Id);
+            _logger.LogWarning(ex, "[ai_summary_error] org={OrgId} email={EmailId} stage=parse", email.OrganizationId, email.Id);
             email.AiSummary = "AI parse error";
             email.AiSuggestedReply = "";
             email.AiCategory = "unknown";
@@ -211,7 +212,7 @@ public class EmailAiService
                 .FirstOrDefaultAsync(p => p.OrganizationId == organizationId, ct);
             if (profile is not null)
             {
-                _logger.LogInformation("Tone profile loaded: formality={F}, traits={T}", profile.Formality, profile.PrimaryTraits);
+                _logger.LogInformation("[tone_profile_loaded] org={OrgId} formality={F}", organizationId, profile.Formality);
                 return profile;
             }
         }

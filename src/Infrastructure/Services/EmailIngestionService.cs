@@ -34,7 +34,7 @@ public partial class EmailIngestionService : IEmailIngestionService
 
     public async Task<EmailIngestionResult> IngestAsync(Guid organizationId, CancellationToken ct = default)
     {
-        _logger.LogInformation("Starting Gmail fetch for org {OrgId}...", organizationId);
+        _logger.LogInformation("[email_ingest_start] org={OrgId}", organizationId);
 
         // Ensure organization exists before ingesting
         await EnsureOrganizationExistsAsync(organizationId, ct);
@@ -46,11 +46,11 @@ public partial class EmailIngestionService : IEmailIngestionService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Gmail fetch failed — {ExType}: {ExMsg}", ex.GetType().Name, ex.Message);
+            _logger.LogError(ex, "[email_ingest_error] org={OrgId} stage=gmail_fetch error={ExType}", organizationId, ex.GetType().Name);
             throw;
         }
 
-        _logger.LogInformation("Fetched {Count} emails from Gmail for org {OrgId}", emails.Count, organizationId);
+        _logger.LogInformation("[email_ingest_fetched] org={OrgId} count={Count}", organizationId, emails.Count);
 
         var result = new EmailIngestionResult { Fetched = emails.Count };
 
@@ -62,6 +62,7 @@ public partial class EmailIngestionService : IEmailIngestionService
                 var exists = await _emailRepo.ExistsByProviderMessageIdAsync(dto.MessageId, organizationId, ct);
                 if (exists)
                 {
+                    _logger.LogDebug("[email_ingest_duplicate_skipped] org={OrgId} provider={ProviderId}", organizationId, dto.MessageId);
                     result.Duplicates++;
                     continue;
                 }
@@ -126,14 +127,14 @@ public partial class EmailIngestionService : IEmailIngestionService
                 // AI processing BEFORE save — populates fields in single DB write
                 try
                 {
-                    _logger.LogInformation("AI processing started for email {MessageId}", dto.MessageId);
+                    _logger.LogInformation("[ai_summary_start] org={OrgId} provider={ProviderId}", organizationId, dto.MessageId);
                     await _emailAi.ProcessEmailAsync(message, ct);
-                    _logger.LogInformation("AI processing complete for email {MessageId}: category={Cat}, priority={Pri}",
-                        dto.MessageId, message.AiCategory, message.AiPriority);
+                    _logger.LogInformation("[ai_summary_success] org={OrgId} provider={ProviderId} cat={Cat} pri={Pri}",
+                        organizationId, dto.MessageId, message.AiCategory, message.AiPriority);
                 }
                 catch (Exception aiEx)
                 {
-                    _logger.LogWarning(aiEx, "AI processing failed for email {MessageId} — saving with fallback values", dto.MessageId);
+                    _logger.LogWarning(aiEx, "[ai_summary_error] org={OrgId} provider={ProviderId}", organizationId, dto.MessageId);
                     message.AiSummary = "AI processing failed";
                     message.AiSuggestedReply = "";
                     message.AiCategory = "unknown";
@@ -143,13 +144,13 @@ public partial class EmailIngestionService : IEmailIngestionService
                 await _emailRepo.AddAsync(message, ct);
                 result.Saved++;
 
-                _logger.LogDebug("Saved email {MessageId} — subject: {Subject}, ai: {AiCat}/{AiPri}",
-                    dto.MessageId, subject, message.AiCategory, message.AiPriority);
+                _logger.LogInformation("[email_ingest_saved] org={OrgId} email={EmailId} provider={ProviderId} cat={Cat} pri={Pri}",
+                    organizationId, message.Id, dto.MessageId, message.AiCategory, message.AiPriority);
             }
             catch (DbUpdateException ex)
             {
                 var inner = ex.InnerException?.Message ?? ex.Message;
-                _logger.LogError(ex, "DB save failed for email {MessageId}: {Inner}", dto.MessageId, inner);
+                _logger.LogError(ex, "[email_ingest_error] org={OrgId} provider={ProviderId} stage=db_save", organizationId, dto.MessageId);
                 result.Failed++;
                 result.Failures.Add(new EmailFailure
                 {
@@ -160,8 +161,8 @@ public partial class EmailIngestionService : IEmailIngestionService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to process email {MessageId}: {ExType} — {ExMsg}",
-                    dto.MessageId, ex.GetType().Name, ex.Message);
+                _logger.LogWarning(ex, "[email_ingest_error] org={OrgId} provider={ProviderId} stage=process error={ExType}",
+                    organizationId, dto.MessageId, ex.GetType().Name);
                 result.Failed++;
                 result.Failures.Add(new EmailFailure
                 {
