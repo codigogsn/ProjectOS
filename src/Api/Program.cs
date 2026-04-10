@@ -28,6 +28,12 @@ try
     var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
+    // Limit request body size (2MB)
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = 2 * 1024 * 1024;
+    });
+
     // Serilog
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)
@@ -180,6 +186,17 @@ try
     app.UseSerilogRequestLogging();
     app.UseRateLimiter();
     app.UseCors();
+
+    // Security headers
+    app.Use(async (context, next) =>
+    {
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+        context.Response.Headers["X-Permitted-Cross-Domain-Policies"] = "none";
+        await next();
+    });
 
     app.UseDefaultFiles();
     app.UseStaticFiles();

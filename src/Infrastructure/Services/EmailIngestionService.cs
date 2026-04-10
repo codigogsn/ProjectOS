@@ -84,6 +84,14 @@ public partial class EmailIngestionService : IEmailIngestionService
                     }
                 }
 
+                // Skip completely empty/invalid emails
+                if (string.IsNullOrWhiteSpace(dto.Subject) && string.IsNullOrWhiteSpace(dto.BodyText) && string.IsNullOrWhiteSpace(dto.From))
+                {
+                    _logger.LogInformation("email_skipped_invalid: {MessageId} — no subject, body, or sender", dto.MessageId);
+                    result.Skipped++;
+                    continue;
+                }
+
                 // Truncate fields to fit DB constraints
                 var subject = (dto.Subject ?? "(no subject)");
                 if (subject.Length > 500) subject = subject[..500];

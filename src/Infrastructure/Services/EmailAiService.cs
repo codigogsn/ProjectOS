@@ -70,7 +70,25 @@ public class EmailAiService
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        var response = await _httpClient.SendAsync(request, ct);
+        // Timeout protection: 15 seconds max for AI call
+        using var aiTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        aiTimeout.CancelAfter(TimeSpan.FromSeconds(15));
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, aiTimeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("AI call timed out for email {EmailId}", email.Id);
+            email.AiSummary = "AI timeout";
+            email.AiSuggestedReply = "";
+            email.AiCategory = "unknown";
+            email.AiPriority = "medium";
+            email.AiReplyIntent = "unknown";
+            return;
+        }
         var responseBody = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
