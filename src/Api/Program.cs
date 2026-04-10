@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.DataProtection;
 using ProjectOS.Api.Middleware;
 using ProjectOS.Api.Services;
 using ProjectOS.Infrastructure.Extensions;
@@ -149,6 +150,12 @@ try
 
         options.RejectionStatusCode = 429;
     });
+
+    // Data Protection — persist keys to file system
+    var keyPath = Environment.GetEnvironmentVariable("DATA_PROTECTION_KEYS_PATH") ?? "/var/data-protection-keys";
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
+        .SetApplicationName("ProjectOS");
 
     var app = builder.Build();
 
@@ -312,6 +319,14 @@ try
     {
         Log.Error(migrationEx, "Database setup failed — app will continue but may have errors");
     }
+
+    // Ensure data protection key directory exists
+    if (!Directory.Exists(keyPath))
+    {
+        Directory.CreateDirectory(keyPath);
+        Log.Information("Created data protection key directory: {Path}", keyPath);
+    }
+    Log.Information("DataProtection configured with persistent storage at {Path}", keyPath);
 
     app.Run();
 }
