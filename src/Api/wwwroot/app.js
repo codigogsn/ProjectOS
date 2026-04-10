@@ -705,9 +705,70 @@ async function loadToneProfile() {
         document.getElementById('toneSignature').value = p.signature || '';
         document.getElementById('toneExample1').value = p.example1 || '';
         document.getElementById('toneExample2').value = p.example2 || '';
+        updateStrength();
+        updatePreview();
     } catch (err) {
         showStatus('Failed to load tone profile', 'error');
     }
+}
+
+var presets = {
+    professional: { formality:'professional', length:'medium', address:'neutral', traits:'clear, precise, reliable', avoid:'robotic, vague', upset:'empathetic', sales:'consultative' },
+    warm:         { formality:'warm', length:'medium', address:'neutral', traits:'warm, caring, consultative, thoughtful', avoid:'cold, robotic, pushy', upset:'empathetic', sales:'consultative' },
+    direct:       { formality:'professional', length:'short', address:'neutral', traits:'direct, efficient, action-oriented', avoid:'vague, wordy, passive', upset:'direct', sales:'aggressive' },
+    friendly:     { formality:'casual', length:'medium', address:'tu', traits:'friendly, helpful, approachable, positive', avoid:'formal, stiff, distant', upset:'empathetic', sales:'subtle' }
+};
+
+function applyPreset(name) {
+    var p = presets[name]; if (!p) return;
+    document.getElementById('toneFormality').value = p.formality;
+    document.getElementById('toneLength').value = p.length;
+    document.getElementById('toneAddress').value = p.address;
+    document.getElementById('tonePrimaryTraits').value = p.traits;
+    document.getElementById('toneAvoidTraits').value = p.avoid;
+    document.getElementById('toneUpset').value = p.upset;
+    document.getElementById('toneSales').value = p.sales;
+    updateStrength();
+    updatePreview();
+    showStatus('Preset applied — review and save when ready', 'success');
+}
+
+function updateStrength() {
+    var traits = (document.getElementById('tonePrimaryTraits').value || '').trim();
+    var sig = (document.getElementById('toneSignature').value || '').trim();
+    var ex1 = (document.getElementById('toneExample1').value || '').trim();
+    var ex2 = (document.getElementById('toneExample2').value || '').trim();
+
+    var level = 'Basic';
+    var cls = 'strength-basic';
+    if (traits.length > 3 && sig.length > 2) { level = 'Good'; cls = 'strength-good'; }
+    if (traits.length > 3 && sig.length > 2 && (ex1.length > 20 || ex2.length > 20)) { level = 'Strong'; cls = 'strength-strong'; }
+
+    var el = document.getElementById('profileStrength');
+    if (el) el.innerHTML = '<span class="strength-dot ' + cls + '"></span> <span class="strength-label">' + level + '</span>';
+}
+
+function updatePreview() {
+    var formality = document.getElementById('toneFormality').value;
+    var length = document.getElementById('toneLength').value;
+    var address = document.getElementById('toneAddress').value;
+    var sig = document.getElementById('toneSignature').value || '';
+
+    var greeting = { tu: 'Hola,', usted: 'Estimado/a,', neutral: 'Hola,' }[address] || 'Hola,';
+    var body = '';
+    if (formality === 'formal') body = 'Le informo que la propuesta actualizada con los nuevos precios ha sido preparada. Se la enviaré a la brevedad para su revisión.';
+    else if (formality === 'warm') body = 'Claro que sí, con mucho gusto te preparo la propuesta actualizada. Dame un momento y te la envío hoy mismo.';
+    else if (formality === 'casual') body = 'Dale, te mando los precios actualizados hoy sin falta.';
+    else body = 'Gracias por el seguimiento. Preparo la propuesta actualizada y te la envío hoy.';
+
+    if (length === 'short') body = body.split('.')[0] + '.';
+    if (length === 'long') body += ' Si necesitas algo adicional o quieres que revisemos algún punto en particular, quedo a tu disposición.';
+
+    var closing = sig ? '\n\n' + sig : '';
+    var preview = greeting + '\n\n' + body + closing;
+
+    var el = document.getElementById('voicePreviewText');
+    if (el) el.textContent = preview;
 }
 
 async function saveToneProfile() {

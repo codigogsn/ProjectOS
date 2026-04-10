@@ -54,99 +54,164 @@
         <!-- Style view (hidden by default) -->
         <div class="style-view" id="styleView" style="display:none">
             <div class="style-container">
+
                 <div class="style-header">
-                    <h2>My Communication Style</h2>
-                    <p class="style-subtitle">Define how AI generates suggested replies for your emails</p>
+                    <div class="style-header-top">
+                        <div>
+                            <h2>My Voice</h2>
+                            <p class="style-subtitle">Teach the AI how you communicate. Every suggested reply will match your personal style.</p>
+                        </div>
+                        <div class="style-strength" id="profileStrength">
+                            <span class="strength-dot"></span> <span class="strength-label">Basic</span>
+                        </div>
+                    </div>
                 </div>
 
+                <!-- Presets -->
+                <div class="style-presets">
+                    <span class="style-presets-label">Quick start:</span>
+                    <button class="preset-chip" onclick="applyPreset('professional')">Clear &amp; Professional</button>
+                    <button class="preset-chip" onclick="applyPreset('warm')">Warm &amp; Consultative</button>
+                    <button class="preset-chip" onclick="applyPreset('direct')">Direct &amp; Fast</button>
+                    <button class="preset-chip" onclick="applyPreset('friendly')">Friendly &amp; Helpful</button>
+                </div>
+
+                <!-- Communication Goal -->
+                <div class="style-section">
+                    <div class="style-section-title">Your Communication Goal</div>
+                    <p class="style-helper">Think about your best emails. What makes them work?</p>
+                    <div class="style-prompts">
+                        <div class="style-prompt-card">
+                            <div class="prompt-q">How should your replies feel?</div>
+                            <div class="prompt-hint">This maps to your formality and traits below</div>
+                        </div>
+                        <div class="style-prompt-card">
+                            <div class="prompt-q">What should people think after reading?</div>
+                            <div class="prompt-hint">"They're professional" / "They care" / "They get to the point"</div>
+                        </div>
+                        <div class="style-prompt-card">
+                            <div class="prompt-q">What should never happen?</div>
+                            <div class="prompt-hint">This maps to your "Avoid" traits below</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tone Basics -->
                 <div class="style-section">
                     <div class="style-section-title">Tone Basics</div>
+                    <p class="style-helper">The foundation of how your replies sound.</p>
                     <div class="style-grid">
                         <div class="style-field">
-                            <label>Formality</label>
-                            <select id="toneFormality">
-                                <option value="formal">Formal</option>
-                                <option value="professional" selected>Professional</option>
-                                <option value="casual">Casual</option>
-                                <option value="warm">Warm</option>
+                            <label>How formal are you?</label>
+                            <select id="toneFormality" onchange="updatePreview()">
+                                <option value="formal">Formal &mdash; structured, respectful distance</option>
+                                <option value="professional" selected>Professional &mdash; clear, business-appropriate</option>
+                                <option value="casual">Casual &mdash; relaxed, conversational</option>
+                                <option value="warm">Warm &mdash; personal, friendly, approachable</option>
                             </select>
                         </div>
                         <div class="style-field">
-                            <label>Response Length</label>
-                            <select id="toneLength">
-                                <option value="short">Short</option>
-                                <option value="medium" selected>Medium</option>
-                                <option value="long">Long</option>
+                            <label>How long are your replies?</label>
+                            <select id="toneLength" onchange="updatePreview()">
+                                <option value="short">Short &mdash; 1-3 sentences, get to the point</option>
+                                <option value="medium" selected>Medium &mdash; cover details without overload</option>
+                                <option value="long">Long &mdash; thorough, detailed, complete context</option>
                             </select>
                         </div>
                         <div class="style-field">
-                            <label>Address Style</label>
-                            <select id="toneAddress">
-                                <option value="tu">Tu (informal)</option>
-                                <option value="usted">Usted (formal)</option>
-                                <option value="neutral" selected>Neutral</option>
+                            <label>How do you address people?</label>
+                            <select id="toneAddress" onchange="updatePreview()">
+                                <option value="tu">Tu &mdash; informal, close</option>
+                                <option value="usted">Usted &mdash; formal, respectful</option>
+                                <option value="neutral" selected>Neutral &mdash; adapt to context</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
+                <!-- Voice Traits -->
                 <div class="style-section">
-                    <div class="style-section-title">Communication Style</div>
+                    <div class="style-section-title">Voice Traits</div>
+                    <p class="style-helper">What words describe your communication style?</p>
                     <div class="style-grid">
                         <div class="style-field">
-                            <label>Primary Traits</label>
-                            <input type="text" id="tonePrimaryTraits" placeholder="warm, direct, expert, sales" />
+                            <label>I want to sound...</label>
+                            <input type="text" id="tonePrimaryTraits" placeholder="e.g. warm, clear, expert, helpful" oninput="updateStrength()" />
+                            <span class="field-hint">Separate with commas. Think: how would a colleague describe your emails?</span>
                         </div>
                         <div class="style-field">
-                            <label>Avoid</label>
-                            <input type="text" id="toneAvoidTraits" placeholder="robotic, aggressive, vague" />
+                            <label>I never want to sound...</label>
+                            <input type="text" id="toneAvoidTraits" placeholder="e.g. robotic, passive-aggressive, vague" oninput="updateStrength()" />
+                            <span class="field-hint">These traits will be explicitly avoided in every suggestion.</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- Situational -->
                 <div class="style-section">
                     <div class="style-section-title">Situational Behavior</div>
+                    <p class="style-helper">How should AI adapt when the context changes?</p>
                     <div class="style-grid">
                         <div class="style-field">
-                            <label>When Sender is Upset</label>
-                            <select id="toneUpset">
-                                <option value="empathetic" selected>Empathetic</option>
-                                <option value="direct">Direct</option>
-                                <option value="formal">Formal</option>
+                            <label>When someone is frustrated or upset</label>
+                            <select id="toneUpset" onchange="updatePreview()">
+                                <option value="empathetic" selected>Empathetic &mdash; acknowledge, validate, then help</option>
+                                <option value="direct">Direct &mdash; address the issue immediately</option>
+                                <option value="formal">Formal &mdash; maintain professional distance</option>
                             </select>
                         </div>
                         <div class="style-field">
-                            <label>Sales Approach</label>
-                            <select id="toneSales">
-                                <option value="subtle">Subtle</option>
-                                <option value="consultative" selected>Consultative</option>
-                                <option value="aggressive">Aggressive</option>
+                            <label>When selling or proposing</label>
+                            <select id="toneSales" onchange="updatePreview()">
+                                <option value="subtle">Subtle &mdash; inform, let them decide</option>
+                                <option value="consultative" selected>Consultative &mdash; guide with expertise</option>
+                                <option value="aggressive">Aggressive &mdash; push for action</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
+                <!-- Signature -->
                 <div class="style-section">
                     <div class="style-section-title">Signature</div>
+                    <p class="style-helper">How you close your emails. Added automatically to every suggested reply.</p>
                     <div class="style-field" style="max-width:100%">
-                        <input type="text" id="toneSignature" placeholder="Best regards, Your Name" style="width:100%" />
+                        <input type="text" id="toneSignature" placeholder="e.g. Saludos, Juan" style="width:100%" oninput="updateStrength();updatePreview()" />
                     </div>
                 </div>
 
+                <!-- Writing Examples -->
                 <div class="style-section">
-                    <div class="style-section-title">Writing Examples</div>
+                    <div class="style-section-title">Your Writing Examples</div>
+                    <p class="style-helper">Paste real replies you've sent. The AI learns your phrasing, rhythm, and word choices from these. The more natural, the better.</p>
                     <div class="style-field" style="max-width:100%">
                         <label>Example 1</label>
-                        <textarea id="toneExample1" rows="3" placeholder="Paste an example of how you write emails..."></textarea>
+                        <textarea id="toneExample1" rows="3" placeholder="Paste a real email reply you've written..." oninput="updateStrength()"></textarea>
                     </div>
                     <div class="style-field" style="max-width:100%;margin-top:12px">
                         <label>Example 2</label>
-                        <textarea id="toneExample2" rows="3" placeholder="Another example..."></textarea>
+                        <textarea id="toneExample2" rows="3" placeholder="Another example — different context helps..." oninput="updateStrength()"></textarea>
+                    </div>
+                </div>
+
+                <!-- Voice Preview -->
+                <div class="style-section">
+                    <div class="style-section-title">Voice Preview</div>
+                    <p class="style-helper">See how your settings would shape a reply to this sample email.</p>
+                    <div class="voice-preview">
+                        <div class="preview-inbound">
+                            <div class="preview-label">Inbound email</div>
+                            <div class="preview-text">"Hi, I wanted to follow up on the proposal we discussed last week. Could you send me the updated pricing? Thanks!"</div>
+                        </div>
+                        <div class="preview-outbound">
+                            <div class="preview-label">Your AI-suggested reply</div>
+                            <div class="preview-text" id="voicePreviewText">Loading preview...</div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="style-actions">
-                    <button class="btn-save-style" onclick="saveToneProfile()">Save Style</button>
+                    <button class="btn-save-style" onclick="saveToneProfile()">Save Voice Profile</button>
                     <span class="style-save-status" id="styleSaveStatus"></span>
                 </div>
             </div>
